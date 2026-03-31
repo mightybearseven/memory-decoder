@@ -81,8 +81,35 @@
   .warn-box p{font-family:var(--sans);font-size:15px;color:var(--text2);line-height:1.6;margin-top:8px;}
   #error{display:none;border:1px solid rgba(255,59,48,.4);background:rgba(255,59,48,.05);padding:16px 20px;margin-bottom:20px;font-family:var(--mono);font-size:15px;color:var(--danger);}
   #error.visible{display:block;}
-  .divider{height:1px;background:var(--border);margin:24px 0;}
-  @media(max-width:600px){main{padding:24px 16px;}header{padding:16px;}.mfr-pn{display:none;}#decode-btn{padding:0 16px;}}
+  /* tabs */
+  .tabs{display:flex;gap:0;margin-bottom:24px;border-bottom:2px solid var(--border);}
+  .tab{font-family:var(--mono);font-size:13px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;padding:10px 20px;cursor:pointer;color:var(--text3);border-bottom:2px solid transparent;margin-bottom:-2px;transition:all .15s;background:none;border-top:none;border-left:none;border-right:none;}
+  .tab:hover{color:var(--text2);}
+  .tab.active{color:var(--accent);border-bottom-color:var(--accent);}
+  .tab-panel{display:none;}
+  .tab-panel.active{display:block;}
+  /* bulk mode */
+  .bulk-textarea{width:100%;min-height:140px;background:var(--surface);border:1px solid var(--border2);outline:none;padding:14px 16px;font-family:var(--mono);font-size:15px;color:var(--text);resize:vertical;transition:border-color .2s;line-height:1.6;}
+  .bulk-textarea:focus{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent);}
+  .bulk-textarea::placeholder{color:var(--text3);}
+  .bulk-actions{display:flex;gap:10px;margin-top:10px;align-items:center;flex-wrap:wrap;}
+  .bulk-btn{background:var(--accent);color:#fff;border:none;padding:10px 24px;font-family:var(--mono);font-size:14px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;cursor:pointer;transition:background .15s;}
+  .bulk-btn:hover{background:#006055;}
+  .bulk-hint{font-family:var(--mono);font-size:12px;color:var(--text3);}
+  /* bulk results */
+  #bulk-results{display:none;margin-top:24px;}
+  #bulk-results.visible{display:block;}
+  .bulk-table-wrap{overflow-x:auto;border:1px solid var(--border2);margin-bottom:12px;}
+  .bulk-table{width:100%;border-collapse:collapse;}
+  .bulk-table th{font-family:var(--mono);font-size:12px;color:var(--text3);letter-spacing:.1em;text-transform:uppercase;padding:10px 14px;text-align:left;border-bottom:2px solid var(--border2);white-space:nowrap;background:var(--surface2);position:sticky;top:0;}
+  .bulk-table td{font-family:var(--mono);font-size:14px;font-weight:600;color:var(--text);padding:11px 14px;white-space:nowrap;border-bottom:1px solid var(--border);cursor:pointer;transition:background .1s;}
+  .bulk-table td:hover{background:var(--surface2);}
+  .bulk-table td.hl{color:var(--accent);}
+  .bulk-table td.err{color:var(--danger);font-weight:400;font-style:italic;}
+  .bulk-table tr:last-child td{border-bottom:none;}
+  .bulk-table tr:hover td{background:var(--surface2);}
+  .bulk-copy-row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;}
+  .bulk-count{font-family:var(--mono);font-size:13px;color:var(--text3);}
 </style>
 </head>
 <body>
@@ -92,29 +119,62 @@
   <div class="badge">Offline · No API</div>
 </header>
 <main>
-  <div style="margin-bottom:32px">
-    <label class="input-label" for="pn-input">Enter Part Number</label>
-    <div class="input-row">
-      <div class="input-prefix">PN //</div>
-      <input type="text" id="pn-input" placeholder="M386A8K40BM2-CTD" autocomplete="off" autocorrect="off" spellcheck="false">
-      <button id="decode-btn" onclick="decode()">DECODE</button>
+
+  <!-- TABS -->
+  <div class="tabs">
+    <button class="tab active" id="tab-btn-single" onclick="switchTab('single')">Single PN</button>
+    <button class="tab" id="tab-btn-bulk" onclick="switchTab('bulk')">Bulk / List</button>
+  </div>
+
+  <!-- SINGLE MODE -->
+  <div id="tab-single" class="tab-panel active">
+    <div style="margin-bottom:32px">
+      <label class="input-label" for="pn-input">Enter Part Number</label>
+      <div class="input-row">
+        <div class="input-prefix">PN //</div>
+        <input type="text" id="pn-input" placeholder="M386A8K40BM2-CTD" autocomplete="off" autocorrect="off" spellcheck="false">
+        <button id="decode-btn" onclick="decode()">DECODE</button>
+      </div>
+      <div class="examples">
+        <span class="input-label" style="margin-bottom:0">try:</span>
+        <span class="example-chip" onclick="setPN('M386A8K40BM2-CTD')">Samsung LRDIMM</span>
+        <span class="example-chip" onclick="setPN('M393A4K40CB2-CTD')">Samsung RDIMM</span>
+        <span class="example-chip" onclick="setPN('M471A1K43DB1-CTD')">Samsung SODIMM</span>
+        <span class="example-chip" onclick="setPN('HMA82GR7CJR8N-VK')">SK Hynix RDIMM</span>
+        <span class="example-chip" onclick="setPN('HMA81GU6CJR8N-VK')">SK Hynix UDIMM</span>
+        <span class="example-chip" onclick="setPN('MTA18ASF2G72PDZ-2G6E1')">Micron RDIMM</span>
+        <span class="example-chip" onclick="setPN('MTA8ATF1G64HZ-3G2J')">Micron SODIMM</span>
+        <span class="example-chip" onclick="setPN('KSM32RS8/8HDR')">Kingston Server</span>
+        <span class="example-chip" onclick="setPN('M425R1GB4PB0-CWM')">Samsung DDR5 SODIMM</span>
+        <span class="example-chip" onclick="setPN('M321R8GA0BB0-CQK')">Samsung DDR5 RDIMM</span>
+      </div>
     </div>
-    <div class="examples">
-      <span class="input-label" style="margin-bottom:0">try:</span>
-      <span class="example-chip" onclick="setPN('M386A8K40BM2-CTD')">Samsung LRDIMM</span>
-      <span class="example-chip" onclick="setPN('M393A4K40CB2-CTD')">Samsung RDIMM</span>
-      <span class="example-chip" onclick="setPN('M471A1K43DB1-CTD')">Samsung SODIMM</span>
-      <span class="example-chip" onclick="setPN('HMA82GR7CJR8N-VK')">SK Hynix RDIMM</span>
-      <span class="example-chip" onclick="setPN('HMA81GU6CJR8N-VK')">SK Hynix UDIMM</span>
-      <span class="example-chip" onclick="setPN('MTA18ASF2G72PDZ-2G6E1')">Micron RDIMM</span>
-      <span class="example-chip" onclick="setPN('MTA8ATF1G64HZ-3G2J')">Micron SODIMM</span>
-      <span class="example-chip" onclick="setPN('KSM32RS8/8HDR')">Kingston Server</span>
-      <span class="example-chip" onclick="setPN('M425R1GB4PB0-CWM')">Samsung DDR5 SODIMM</span>
-      <span class="example-chip" onclick="setPN('M321R8GA0BB0-CQK')">Samsung DDR5 RDIMM</span>
+    <div id="error"></div>
+    <div id="results"></div>
+  </div>
+
+  <!-- BULK MODE -->
+  <div id="tab-bulk" class="tab-panel">
+    <label class="input-label" for="bulk-input">Paste Part Numbers — one per line</label>
+    <textarea id="bulk-input" class="bulk-textarea" placeholder="M386A8K40BM2-CTD&#10;HMA82GR7CJR8N-VK&#10;MTA18ASF2G72PDZ-2G6E1&#10;KSM32RS8/8HDR&#10;M471A1K43DB1-CTD"></textarea>
+    <div class="bulk-actions">
+      <button class="bulk-btn" onclick="decodeBulk()">DECODE ALL</button>
+      <span class="bulk-hint">One PN per line — paste from Excel, a text file, or type directly</span>
+    </div>
+    <div id="bulk-results">
+      <div class="bulk-copy-row" style="margin-top:20px;margin-bottom:10px;">
+        <span class="bulk-count" id="bulk-count"></span>
+        <button class="copy-btn" id="bulk-copy-btn" onclick="copyBulkTSV()">Copy All for Excel</button>
+      </div>
+      <div class="bulk-table-wrap">
+        <table class="bulk-table">
+          <thead><tr id="bulk-thead"></tr></thead>
+          <tbody id="bulk-tbody"></tbody>
+        </table>
+      </div>
     </div>
   </div>
-  <div id="error"></div>
-  <div id="results"></div>
+
 </main>
 
 <script>
@@ -1014,6 +1074,96 @@ function renderUnknown(pn){
 
 function setPN(pn){document.getElementById('pn-input').value=pn;decode();}
 document.getElementById('pn-input').addEventListener('keydown',function(e){if(e.key==='Enter')decode();});
+
+function switchTab(name){
+  document.querySelectorAll('.tab').forEach(function(t){t.classList.remove('active');});
+  document.querySelectorAll('.tab-panel').forEach(function(p){p.classList.remove('active');});
+  document.getElementById('tab-btn-'+name).classList.add('active');
+  document.getElementById('tab-'+name).classList.add('active');
+}
+
+// ─── BULK DECODE ────────────────────────────────────────
+var bulkRows=[];
+
+function decodeBulk(){
+  var raw=document.getElementById('bulk-input').value;
+  var pns=raw.split(/[\n,]+/).map(function(s){return s.trim();}).filter(function(s){return s.length>0;});
+  if(!pns.length) return;
+
+  bulkRows=[];
+  pns.forEach(function(pn){
+    try{
+      var r=detectAndDecode(pn);
+      if(r){
+        var row=getExcelRow(r);
+        row._ok=true;
+        bulkRows.push(row);
+      } else {
+        bulkRows.push({pn:pn.toUpperCase(),_ok:false,_err:'Unrecognized'});
+      }
+    }catch(e){
+      bulkRows.push({pn:pn.toUpperCase(),_ok:false,_err:'Parse error'});
+    }
+  });
+
+  // Build header row
+  var thead=document.getElementById('bulk-thead');
+  thead.innerHTML=EXCEL_COLS.map(function(c){return '<th>'+esc(c.label)+'</th>';}).join('');
+
+  // Build data rows
+  var tbody=document.getElementById('bulk-tbody');
+  tbody.innerHTML=bulkRows.map(function(row,ri){
+    return '<tr>'+EXCEL_COLS.map(function(c){
+      if(!row._ok){
+        return c.key==='pn'
+          ? '<td class="err" title="Click to copy" onclick="copyCellVal(\''+esc(row.pn)+'\')">'+esc(row.pn)+' — '+esc(row._err)+'</td>'
+          : '<td class="err" onclick="copyCellVal(\'\')">—</td>';
+      }
+      var v=row[c.key]||'';
+      var nil=!v||v==='?';
+      var hl=['Capacity','Speed','Rank','ECC','DRAM Standard','Module Type'].indexOf(c.label)>=0;
+      var display=nil?'—':esc(String(v));
+      var copyVal=nil?'':esc(String(v));
+      return '<td class="'+(nil?'':hl?'hl':'')+'" title="Click to copy" onclick="copyCellVal(\''+copyVal+'\')">'+display+'</td>';
+    }).join('')+'</tr>';
+  }).join('');
+
+  var ok=bulkRows.filter(function(r){return r._ok;}).length;
+  document.getElementById('bulk-count').textContent=ok+' decoded, '+(bulkRows.length-ok)+' unrecognized';
+  document.getElementById('bulk-results').classList.add('visible');
+}
+
+function copyBulkTSV(){
+  var lines=bulkRows.map(function(row){
+    if(!row._ok) return EXCEL_COLS.map(function(c){return c.key==='pn'?row.pn:'';}).join('\t');
+    return EXCEL_COLS.map(function(c){return String(row[c.key]||'').replace(/\t|\n/g,' ');}).join('\t');
+  });
+  var tsv=lines.join('\n');
+  var btn=document.getElementById('bulk-copy-btn');
+  navigator.clipboard.writeText(tsv).then(function(){
+    btn.textContent='Copied!';btn.classList.add('copied');
+    setTimeout(function(){btn.textContent='Copy All for Excel';btn.classList.remove('copied');},2000);
+  }).catch(function(){
+    var ta=document.createElement('textarea');
+    ta.value=tsv;ta.style.cssText='position:fixed;opacity:0';
+    document.body.appendChild(ta);ta.select();document.execCommand('copy');document.body.removeChild(ta);
+    btn.textContent='Copied!';btn.classList.add('copied');
+    setTimeout(function(){btn.textContent='Copy All for Excel';btn.classList.remove('copied');},2000);
+  });
+}
+
+function copyCellVal(val){
+  if(!val) return;
+  navigator.clipboard.writeText(val).catch(function(){
+    var ta=document.createElement('textarea');
+    ta.value=val;ta.style.cssText='position:fixed;opacity:0';
+    document.body.appendChild(ta);ta.select();document.execCommand('copy');document.body.removeChild(ta);
+  });
+  var el=event.currentTarget;
+  var orig=el.style.background;
+  el.style.background='rgba(0,122,106,0.15)';
+  setTimeout(function(){el.style.background=orig;},300);
+}
 
 function decode(){
   var raw=document.getElementById('pn-input').value.trim();
