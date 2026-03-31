@@ -43,6 +43,9 @@
   .copy-btn:hover{border-color:var(--accent);color:var(--accent);}
   .copy-btn.copied{border-color:var(--accent);color:var(--accent);}
   /* excel table */
+  .scroll-wrap{position:relative;}
+  .scroll-wrap::after{content:'scroll →';position:absolute;right:0;top:0;bottom:0;width:80px;background:linear-gradient(to right,transparent,var(--surface2) 60%);display:flex;align-items:center;justify-content:flex-end;padding-right:10px;font-family:var(--mono);font-size:11px;color:var(--text3);letter-spacing:.06em;pointer-events:none;transition:opacity .3s;white-space:nowrap;}
+  .scroll-wrap.scrolled-end::after{opacity:0;}
   .excel-wrap{background:var(--surface2);border:1px solid var(--border2);margin-bottom:20px;overflow-x:auto;}
   .excel-header{display:flex;align-items:center;justify-content:space-between;padding:11px 16px 9px;border-bottom:1px solid var(--border);}
   .excel-label{font-family:var(--mono);font-size:12px;color:var(--text3);letter-spacing:.12em;text-transform:uppercase;}
@@ -103,7 +106,7 @@
   /* bulk results */
   #bulk-results{display:none;margin-top:24px;}
   #bulk-results.visible{display:block;}
-  .bulk-table-wrap{overflow-x:auto;border:1px solid var(--border2);margin-bottom:12px;}
+  .bulk-table-wrap{overflow-x:auto;border:1px solid var(--border2);margin-bottom:12px;background:var(--surface2);}
   .bulk-table{width:100%;border-collapse:collapse;}
   .bulk-table th{font-family:var(--mono);font-size:12px;color:var(--text3);letter-spacing:.1em;text-transform:uppercase;padding:10px 14px;text-align:left;border-bottom:2px solid var(--border2);white-space:nowrap;background:var(--surface2);position:sticky;top:0;}
   .bulk-table td{font-family:var(--mono);font-size:14px;font-weight:600;color:var(--text);padding:11px 14px;white-space:nowrap;border-bottom:1px solid var(--border);cursor:pointer;transition:background .1s;}
@@ -170,11 +173,13 @@
         <span class="bulk-count" id="bulk-count"></span>
         <button class="copy-btn" id="bulk-copy-btn" onclick="copyBulkTSV()">Copy All for Excel</button>
       </div>
-      <div class="bulk-table-wrap">
+      <div class="scroll-wrap" id="bulk-scroll-wrap">
+      <div class="bulk-table-wrap" id="bulk-table-inner">
         <table class="bulk-table">
           <thead><tr id="bulk-thead"></tr></thead>
           <tbody id="bulk-tbody"></tbody>
         </table>
+      </div>
       </div>
       <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:8px;">
         <span style="font-family:var(--mono);font-size:11px;color:var(--text3)">Rank confidence:</span>
@@ -1055,7 +1060,8 @@ function renderResult(r){
     '</div>'+
 
     // ── EXCEL TABLE ──
-    '<div class="excel-wrap">'+
+    '<div class="scroll-wrap" id="excel-scroll-wrap">'+
+    '<div class="excel-wrap" id="excel-inner-wrap">'+
       '<div class="excel-header">'+
         '<span class="excel-label">// Key Specs — Excel Ready</span>'+
         '<button class="copy-btn" id="tbl-copy-btn" data-tsv="'+esc(tsv)+'" onclick="copyTable()">Copy for Excel</button>'+
@@ -1064,7 +1070,8 @@ function renderResult(r){
         '<thead><tr>'+thCells+'</tr></thead>'+
         '<tbody><tr>'+tdCells+'</tr></tbody>'+
       '</table>'+
-    '</div>'+
+    '</div>'+  // close excel-wrap
+    '</div>'+  // close scroll-wrap
 
     '<div class="confidence-wrap">'+
       '<div class="confidence-bar"><div class="confidence-fill" id="cf" style="background:'+ac+'"></div></div>'+
@@ -1082,7 +1089,22 @@ function renderResult(r){
     var f=document.getElementById('cf'),p=document.getElementById('cp');
     if(f) f.style.width=r.confidence+'%';
     if(p) p.textContent=r.confidence+'%';
+    initScrollIndicator('excel-inner-wrap','excel-scroll-wrap');
   },80);});
+}
+
+function initScrollIndicator(scrollElId, wrapElId){
+  var el=document.getElementById(scrollElId);
+  var wrap=document.getElementById(wrapElId);
+  if(!el||!wrap) return;
+  function check(){
+    // if content isn't wider than container, no need for indicator
+    if(el.scrollWidth<=el.clientWidth+4){wrap.classList.add('scrolled-end');return;}
+    wrap.classList.toggle('scrolled-end', el.scrollLeft+el.clientWidth>=el.scrollWidth-8);
+  }
+  el.removeEventListener('scroll',check);
+  el.addEventListener('scroll',check);
+  check();
 }
 
 function copyLiner(){
@@ -1179,6 +1201,7 @@ function decodeBulk(){
   var ok=bulkRows.filter(function(r){return r._ok;}).length;
   document.getElementById('bulk-count').textContent=ok+' decoded, '+(bulkRows.length-ok)+' unrecognized';
   document.getElementById('bulk-results').classList.add('visible');
+  setTimeout(function(){initScrollIndicator('bulk-table-inner','bulk-scroll-wrap');},50);
 }
 
 function copyBulkTSV(){
