@@ -36,12 +36,21 @@
   #results.visible{display:block;}
 
   /* sales one-liner */
-  .oneliner-wrap{background:var(--surface2);border:1px solid var(--border2);padding:16px 18px;margin-bottom:20px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;}
+  .oneliner-wrap{background:var(--surface2);border:1px solid var(--border2);padding:16px 18px;margin-bottom:12px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;}
   .oneliner-label{font-family:var(--mono);font-size:10px;color:var(--text3);letter-spacing:.12em;text-transform:uppercase;white-space:nowrap;}
   .oneliner-text{font-family:var(--mono);font-size:13px;font-weight:600;color:var(--text);flex:1;line-height:1.5;min-width:0;word-break:break-word;}
   .copy-btn{background:transparent;border:1px solid var(--border2);color:var(--text3);font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;padding:6px 14px;cursor:pointer;transition:all .15s;white-space:nowrap;flex-shrink:0;}
   .copy-btn:hover{border-color:var(--accent);color:var(--accent);}
   .copy-btn.copied{border-color:var(--accent);color:var(--accent);}
+  /* excel table */
+  .excel-wrap{background:var(--surface2);border:1px solid var(--border2);margin-bottom:20px;overflow-x:auto;}
+  .excel-header{display:flex;align-items:center;justify-content:space-between;padding:10px 16px 8px;border-bottom:1px solid var(--border);}
+  .excel-label{font-family:var(--mono);font-size:10px;color:var(--text3);letter-spacing:.12em;text-transform:uppercase;}
+  .excel-table{width:100%;border-collapse:collapse;}
+  .excel-table th{font-family:var(--mono);font-size:10px;color:var(--text3);letter-spacing:.1em;text-transform:uppercase;padding:8px 14px;text-align:left;border-bottom:1px solid var(--border);white-space:nowrap;background:var(--surface);}
+  .excel-table td{font-family:var(--mono);font-size:13px;font-weight:600;color:var(--text);padding:10px 14px;white-space:nowrap;}
+  .excel-table td.hl{color:var(--accent);}
+  .excel-table td.nil{color:var(--text3);font-style:italic;font-weight:400;}
 
   .mfr-banner{display:flex;align-items:center;gap:12px;padding:16px 20px;border:1px solid var(--border2);background:var(--surface);margin-bottom:20px;flex-wrap:wrap;}
   .mfr-dot{width:8px;height:8px;flex-shrink:0;}
@@ -100,7 +109,8 @@
       <span class="example-chip" onclick="setPN('MTA18ASF2G72PDZ-2G6E1')">Micron RDIMM</span>
       <span class="example-chip" onclick="setPN('MTA8ATF1G64HZ-3G2J')">Micron SODIMM</span>
       <span class="example-chip" onclick="setPN('KSM32RS8/8HDR')">Kingston Server</span>
-      <span class="example-chip" onclick="setPN('KVR32N22S8/8')">Kingston Value</span>
+      <span class="example-chip" onclick="setPN('M425R1GB4PB0-CWM')">Samsung DDR5 SODIMM</span>
+      <span class="example-chip" onclick="setPN('M321R8GA0BB0-CQK')">Samsung DDR5 RDIMM</span>
     </div>
   </div>
   <div id="error"></div>
@@ -218,6 +228,7 @@ function deriveRankMicron(numDies, modType, pkgCode) {
 // ═══════════════════════════════════════════════════════
 var SAMSUNG=(function(){
   var DT={
+    // DDR4
     '38':{type:'LRDIMM',        pins:'288-pin',ecc:true, reg:true, lr:true,  form:'DIMM',   gen:'DDR4'},
     '39':{type:'RDIMM',         pins:'288-pin',ecc:true, reg:true, lr:false, form:'DIMM',   gen:'DDR4'},
     '93':{type:'RDIMM',         pins:'288-pin',ecc:true, reg:true, lr:false, form:'DIMM',   gen:'DDR4'},
@@ -227,20 +238,51 @@ var SAMSUNG=(function(){
     '71':{type:'SODIMM',        pins:'260-pin',ecc:false,reg:false,lr:false, form:'SODIMM', gen:'DDR4'},
     '74':{type:'ECC SODIMM',    pins:'260-pin',ecc:true, reg:false,lr:false, form:'SODIMM', gen:'DDR4'},
     '47':{type:'SODIMM',        pins:'260-pin',ecc:false,reg:false,lr:false, form:'SODIMM', gen:'DDR4'},
+    // DDR3
     '72':{type:'RDIMM',         pins:'240-pin',ecc:true, reg:true, lr:false, form:'DIMM',   gen:'DDR3'},
     '76':{type:'LRDIMM',        pins:'240-pin',ecc:true, reg:true, lr:true,  form:'DIMM',   gen:'DDR3'},
     '51':{type:'Non-ECC UDIMM', pins:'240-pin',ecc:false,reg:false,lr:false, form:'DIMM',   gen:'DDR3'},
     '53':{type:'ECC UDIMM',     pins:'240-pin',ecc:true, reg:false,lr:false, form:'DIMM',   gen:'DDR3'},
     '41':{type:'SODIMM',        pins:'204-pin',ecc:false,reg:false,lr:false, form:'SODIMM', gen:'DDR3'},
     '44':{type:'ECC SODIMM',    pins:'204-pin',ecc:true, reg:false,lr:false, form:'SODIMM', gen:'DDR3'},
+    // DDR5 — 3rd digit is sub-class, detected separately
+    // M321 = DDR5 RDIMM 288-pin, M323 = DDR5 UDIMM, M325 = DDR5 ECC UDIMM
+    // M329 = DDR5 LRDIMM, M425 = DDR5 SODIMM 262-pin
+    '21':{type:'RDIMM',         pins:'288-pin',ecc:true, reg:true, lr:false, form:'DIMM',   gen:'DDR5'},
+    '23':{type:'UDIMM',         pins:'288-pin',ecc:false,reg:false,lr:false, form:'DIMM',   gen:'DDR5'},
+    '25':{type:'ECC UDIMM',     pins:'288-pin',ecc:true, reg:false,lr:false, form:'DIMM',   gen:'DDR5'},
+    '29':{type:'LRDIMM',        pins:'288-pin',ecc:true, reg:true, lr:true,  form:'DIMM',   gen:'DDR5'},
+    '42':{type:'SODIMM',        pins:'262-pin',ecc:false,reg:false,lr:false, form:'SODIMM', gen:'DDR5'},
+    '86':{type:'LRDIMM',        pins:'288-pin',ecc:true, reg:true, lr:true,  form:'DIMM',   gen:'DDR5'},
   };
+
+  // DDR5 depth → total capacity (DDR5 uses GB directly, not address depth)
+  // Cross-ref: M321R2G=16GB, M321R4G=32GB, M321R8G=64GB, M425R1G=8GB,
+  //            M425R3G=24GB, M425R6G=48GB, M425RZG=12GB (Z=unusual)
+  var DEP5={
+    '1G':'8GB','2G':'16GB','3G':'24GB','4G':'32GB','6G':'48GB',
+    '8G':'64GB','AG':'96GB','BG':'128GB','ZG':'12GB',
+  };
+
+  // DDR4/DDR3 depth codes (address depth, not total GB)
   var DEP={
     '56':'256M','51':'512M','1G':'1G','2G':'2G','4G':'4G','8G':'8G','AG':'16G',
     '1K':'1G','2K':'2G','4K':'4G','8K':'8G','AK':'16G','BK':'32G',
   };
+
+  // DDR5 bit org: 0=x4, 3=x8, 4=x16 (same encoding)
   var BOG={'0':'x4','3':'x8','4':'x16'};
   var CREV={'A':'2nd Gen','B':'3rd Gen','C':'4th Gen','D':'5th Gen','E':'6th Gen','F':'7th Gen','G':'8th Gen','H':'9th Gen'};
-  var PKG={'M':'FBGA (Flip Chip)','B':'FBGA DDP (stacked)','2':'FBGA 2H TSV','4':'FBGA 4H TSV','A':'FBGA','C':'FBGA','D':'FBGA DDP'};
+  var PKG={'M':'FBGA (Flip Chip)','B':'FBGA DDP (stacked)','2':'FBGA 2H TSV','4':'FBGA 4H TSV','A':'FBGA','C':'FBGA','D':'FBGA DDP','P':'FBGA (LPDDR5 variant)'};
+
+  // DDR5 speed suffixes (3-char after temp 'C')
+  var SPD5={
+    'CQK':'DDR5-4800 CL40','CVB':'DDR5-5200 CL42','CWM':'DDR5-5600 CL46',
+    'CXX':'DDR5-6400 CL52','CYG':'DDR5-6800','CZH':'DDR5-7200',
+    'QK' :'DDR5-4800 CL40','VB' :'DDR5-5200 CL42','WM' :'DDR5-5600 CL46',
+    'XX' :'DDR5-6400 CL52',
+  };
+  // DDR4/DDR3 speed suffixes
   var SPD={
     'PB':'DDR4-2133 CL15','RB':'DDR4-2133 CL17','RC':'DDR4-2400 CL17','TC':'DDR4-2400 CL19',
     'TD':'DDR4-2666 CL19','WD':'DDR4-2666 CL22','TF':'DDR4-2133 CL15','UH':'DDR4-2400 CL17',
@@ -256,43 +298,90 @@ var SAMSUNG=(function(){
     var parts=pn.split('-'),base=parts[0].toUpperCase(),suf=(parts[1]||'').toUpperCase();
     if(base.length<9) return null;
     var dc=base.substring(1,3),info=DT[dc];
-    var dtch=base[3];
-    var gen=info?info.gen:(dtch==='A'?'DDR4':'DDR3');
-    var dr=base.substring(4,6),dep=DEP[dr];
-    var bc=base[6],boc=base[7],crc=base[8],pkc=base[9]||'',pcbr=base[10]||'';
-    var spd='',temp='';
-    if(suf){
-      spd=SPD[suf]||SPD[suf.substring(1,3)]||SPD[suf.substring(0,2)]||suf;
-      temp=suf[0]==='C'?'Commercial (0–85°C)':suf[0]==='I'?'Industrial (-40–95°C)':suf[0];
-    }
-    var isK=dr.endsWith('K')||dr.endsWith('B');
-    var capKey=dep?dep.replace(/ .*/,''):null;
-    var cap=capKey?(CAP[capKey]||null):null;
 
-    // Derive rank
-    var rankStr=deriveRank(dr, boc, pkc, info?info.type:'');
-    // For TSV packages, double-check
-    if(pkc==='4') {
-      // 4H TSV — 4 dies per chip, so multiply rank by 2 again vs DDP
-      // e.g. AK + 4H TSV = 8Rx4 for 128GB LRDIMM
-      var baseRank=deriveRank(dr, boc, 'M', info?info.type:'');
-      if(baseRank) rankStr = (parseInt(baseRank)*4)+'Rx'+(BOG[boc]||'?');
+    // Position 3 may be a sub-class digit (e.g. M393, M391, M378, M471, M321, M425)
+    // rather than the DRAM type char. If it's a digit, shift all fields right by 1.
+    var off = /[0-9]/.test(base[3]) ? 4 : 3;
+
+    var dtch=base[off]; // 'A'=DDR4, 'B'/'C'=DDR3, 'R'=DDR5
+    var isDDR5 = dtch==='R';
+    var gen=info?info.gen:(isDDR5?'DDR5':dtch==='A'?'DDR4':'DDR3');
+
+    var dr=base.substring(off+1,off+3);  // depth code
+    var bc=base[off+3];                  // banks / sub-type
+    var boc=base[off+4];                 // bit org
+    var crc=base[off+5];                 // component rev
+    var pkc=base[off+6]||'';            // package
+    var pcbr=base[off+7]||'';           // PCB rev
+
+    var dep, cap, spd='', temp='';
+
+    if(isDDR5){
+      // DDR5: depth field IS the total capacity code
+      dep=dr;
+      cap=DEP5[dr]||null;
+      // Speed from suffix — try 3-char then 2-char
+      if(suf){
+        spd=SPD5[suf]||SPD5[suf.substring(0,3)]||SPD5[suf.substring(1,3)]||suf;
+        temp=suf[0]==='C'?'Commercial (0–85°C)':suf[0]==='I'?'Industrial (-40–95°C)':suf[0];
+      }
+    } else {
+      dep=DEP[dr];
+      var capKey=dep?dep.replace(/ .*/,''):null;
+      cap=capKey?(CAP[capKey]||null):null;
+      if(suf){
+        spd=SPD[suf]||SPD[suf.substring(1,3)]||SPD[suf.substring(0,2)]||suf;
+        temp=suf[0]==='C'?'Commercial (0–85°C)':suf[0]==='I'?'Industrial (-40–95°C)':suf[0];
+      }
+    }
+
+    var isK=!isDDR5&&(dr.endsWith('K')||dr.endsWith('B'));
+    var dieDen=isDDR5?'16Gb/24Gb (DDR5)':isK?'8Gb':'4Gb';
+
+    // Rank derivation
+    var rankStr=null;
+    if(isDDR5 && cap && boc){
+      // DDR5 SODIMM: x64 bus. DDR5 RDIMM/server: x80 bus (72 data + 8 parity)
+      var isSodimm=info&&info.form==='SODIMM';
+      var busW=isSodimm?64:80;
+      var chipW=BOG[boc]==='x4'?4:BOG[boc]==='x8'?8:BOG[boc]==='x16'?16:8;
+      var chipsPerRank=busW/chipW;
+      // DDR5 die density: 'B-die' variants are 16Gb or 24Gb
+      // We infer from capacity ÷ (chipsPerRank × dieGb)
+      // Try 16Gb die first, then 24Gb
+      var capGB=parseInt(cap);
+      var dieGbOptions=[16/8, 24/8]; // 2GB or 3GB per die
+      for(var di=0;di<dieGbOptions.length;di++){
+        var gbPerRank=chipsPerRank*dieGbOptions[di];
+        var ranks=Math.round(capGB/gbPerRank);
+        if(ranks>=1&&ranks<=8&&Math.abs(capGB-ranks*gbPerRank)<0.5){
+          rankStr=ranks+'Rx'+chipW;
+          break;
+        }
+      }
+    } else if(!isDDR5){
+      rankStr=deriveRank(dr, boc, pkc, info?info.type:'');
+      if(pkc==='4'){
+        var baseRank=deriveRank(dr, boc, 'M', info?info.type:'');
+        if(baseRank) rankStr=(parseInt(baseRank)*4)+'Rx'+(BOG[boc]||'?');
+      }
     }
 
     return {
       manufacturer:'Samsung',
-      confidence:info?96:72,
+      confidence:info?(isDDR5?94:96):72,
       pn_display:pn.toUpperCase(),
       segments:[
-        {seg:'M',    label:'Product Type',   value:'Memory Module'},
-        {seg:dc,     label:'DIMM Type',      value:info?info.type+' · '+info.pins:'Unknown ('+dc+')'},
-        {seg:dtch,   label:'DRAM Standard',  value:gen},
-        {seg:dr,     label:'Memory Depth',   value:dep||dr},
-        {seg:bc,     label:'Banks/Interface',value:bc==='4'?'16 banks, POD 1.2V':bc},
-        {seg:boc,    label:'Bit Org',        value:BOG[boc]||boc},
-        {seg:crc,    label:'Component Rev',  value:CREV[crc]||crc},
-        {seg:pkc,    label:'Package',        value:PKG[pkc]||pkc||'?'},
-        {seg:pcbr,   label:'PCB Revision',   value:pcbr||'none'},
+        {seg:'M',         label:'Product Type',   value:'Memory Module'},
+        {seg:dc,          label:'DIMM Type',      value:info?info.type+' · '+info.pins:'Unknown ('+dc+')'},
+        ...(off===4?[{seg:base[3],label:'Form Factor Digit',value:base[3]==='3'?'DIMM':base[3]==='4'?'SODIMM':base[3]}]:[]),
+        {seg:dtch,        label:'DRAM Standard',  value:gen},
+        {seg:dr,          label:isDDR5?'Capacity Code':'Memory Depth', value:isDDR5?(cap||dr):(dep||dr)},
+        {seg:bc,          label:isDDR5?'Sub-type':'Banks/Interface', value:isDDR5?bc:(bc==='4'?'16 banks, POD 1.2V':bc)},
+        {seg:boc,         label:'Bit Org',        value:BOG[boc]||boc},
+        {seg:crc,         label:'Component Rev',  value:CREV[crc]||crc},
+        {seg:pkc,         label:'Package',        value:PKG[pkc]||pkc||'?'},
+        {seg:pcbr,        label:'PCB Revision',   value:pcbr||'none'},
         ...(suf?[{seg:suf,label:'Speed Suffix',value:spd||suf}]:[]),
       ].filter(s=>s.seg),
       specs:{
@@ -308,13 +397,15 @@ var SAMSUNG=(function(){
         'Registered':      info?(info.reg?'Yes':'No'):'?',
         'Load Reduced':    info?(info.lr?'Yes':'No'):'No',
         'Bit Organization':BOG[boc]||boc,
-        'Die Density':     isK?'8Gb':'4Gb',
+        'Die Density':     dieDen,
         'Package':         PKG[pkc]||pkc||'?',
         'Component Rev':   CREV[crc]||crc,
         'Temperature':     temp||'?',
-        'Voltage':         gen==='DDR3L'?'1.35V':gen==='DDR3'?'1.5V':'1.2V',
+        'Voltage':         gen==='DDR5'?'1.1V':gen==='DDR3L'?'1.35V':gen==='DDR3'?'1.5V':'1.2V',
       },
-      notes:'Rank is derived from depth + bit organization + package type (DDP doubles rank). Verify against datasheet for critical applications.',
+      notes: isDDR5
+        ? 'DDR5 rank is derived from capacity ÷ (chips-per-rank × die density). Verify against label or SPD for critical applications.'
+        : 'Rank is derived from depth + bit organization + package type (DDP doubles rank). Verify against datasheet for critical applications.',
     };
   }
   return{decode};
@@ -699,8 +790,7 @@ function detectAndDecode(pn){
 
 
 // ═══════════════════════════════════════════════════════
-// SALES ONE-LINER BUILDER
-// Format: [cap] [gen] [type] [rank] [speed] [ecc] — [mfr] [pn]
+// SALES ONE-LINER
 // ═══════════════════════════════════════════════════════
 function buildOneLiner(r){
   var s=r.specs;
@@ -712,22 +802,66 @@ function buildOneLiner(r){
   var spd  = s['Speed']&&s['Speed']!=='?' ? s['Speed'] : null;
   var ecc  = s['ECC']==='Yes' ? 'ECC' : null;
   var reg  = s['Registered']==='Yes' ? 'Registered' : null;
-  var lr   = s['Load Reduced']==='Yes' ? 'Load Reduced' : null;
   var volt = s['Voltage']&&s['Voltage']!=='?' ? s['Voltage'] : null;
-
   if(cap)  parts.push(cap);
   if(gen)  parts.push(gen);
   if(type) parts.push(type);
   if(rank) parts.push(rank);
   if(spd)  parts.push(spd);
   if(ecc)  parts.push(ecc);
-  // don't double-up ECC if already in type name
   if(reg && type && !type.toLowerCase().includes('rdimm') && !type.toLowerCase().includes('lrdimm')) parts.push(reg);
   if(volt) parts.push(volt);
   parts.push('—');
   parts.push(r.manufacturer.replace(/ \(.+\)/,''));
   parts.push(r.pn_display);
   return parts.join(' ');
+}
+
+// ═══════════════════════════════════════════════════════
+// EXCEL TABLE — TSV (tab-separated) pastes into Excel as columns
+// Columns: Part Number | Manufacturer | DRAM Standard | Module Type | Form Factor | Capacity | Speed | Rank | ECC
+// ═══════════════════════════════════════════════════════
+var EXCEL_COLS=[
+  {key:'pn',           label:'Part Number'},
+  {key:'Manufacturer', label:'Manufacturer'},
+  {key:'DRAM Standard',label:'DRAM Standard'},
+  {key:'Module Type',  label:'Module Type'},
+  {key:'Form Factor',  label:'Form Factor'},
+  {key:'Capacity',     label:'Capacity'},
+  {key:'Speed',        label:'Speed'},
+  {key:'Rank',         label:'Rank'},
+  {key:'ECC',          label:'ECC'},
+];
+
+function getExcelRow(r){
+  var row={pn:r.pn_display};
+  EXCEL_COLS.forEach(function(c){
+    if(c.key!=='pn') row[c.key]=r.specs[c.label]||r.specs[c.key]||'';
+  });
+  return row;
+}
+
+function buildTSV(r){
+  var row=getExcelRow(r);
+  var hdr=EXCEL_COLS.map(function(c){return c.label;}).join('\t');
+  var vals=EXCEL_COLS.map(function(c){return String(row[c.key]||'').replace(/\t|\n/g,' ');}).join('\t');
+  return hdr+'\n'+vals;
+}
+
+function copyTable(){
+  var btn=document.getElementById('tbl-copy-btn');
+  if(!btn) return;
+  var tsv=btn.getAttribute('data-tsv');
+  navigator.clipboard.writeText(tsv).then(function(){
+    btn.textContent='Copied!';btn.classList.add('copied');
+    setTimeout(function(){btn.textContent='Copy for Excel';btn.classList.remove('copied');},2000);
+  }).catch(function(){
+    var ta=document.createElement('textarea');
+    ta.value=tsv;ta.style.cssText='position:fixed;opacity:0';
+    document.body.appendChild(ta);ta.select();document.execCommand('copy');document.body.removeChild(ta);
+    btn.textContent='Copied!';btn.classList.add('copied');
+    setTimeout(function(){btn.textContent='Copy for Excel';btn.classList.remove('copied');},2000);
+  });
 }
 
 
@@ -746,6 +880,17 @@ function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').repl
 function renderResult(r){
   var ac=MFC[r.manufacturer]||'#00d4aa';
   var liner=buildOneLiner(r);
+  var tsv=buildTSV(r);
+  var row=getExcelRow(r);
+
+  // Excel table rows
+  var thCells=EXCEL_COLS.map(function(c){return '<th>'+esc(c.label)+'</th>';}).join('');
+  var tdCells=EXCEL_COLS.map(function(c){
+    var v=row[c.key]||'';
+    var nil=!v||v==='?';
+    var hl=['Capacity','Speed','Rank','ECC','DRAM Standard','Module Type'].indexOf(c.label)>=0;
+    return '<td class="'+(nil?'nil':hl?'hl':'')+'">'+(nil?'—':esc(String(v)))+'</td>';
+  }).join('');
 
   var annos=r.segments.filter(s=>s.seg&&s.seg.length).map(s=>
     '<div class="pn-anno">'+
@@ -777,6 +922,18 @@ function renderResult(r){
       '<span class="oneliner-label">Sales copy</span>'+
       '<span class="oneliner-text" id="liner-text">'+esc(liner)+'</span>'+
       '<button class="copy-btn" id="copy-btn" onclick="copyLiner()">Copy</button>'+
+    '</div>'+
+
+    // ── EXCEL TABLE ──
+    '<div class="excel-wrap">'+
+      '<div class="excel-header">'+
+        '<span class="excel-label">// Key Specs — Excel Ready</span>'+
+        '<button class="copy-btn" id="tbl-copy-btn" data-tsv="'+esc(tsv)+'" onclick="copyTable()">Copy for Excel</button>'+
+      '</div>'+
+      '<table class="excel-table">'+
+        '<thead><tr>'+thCells+'</tr></thead>'+
+        '<tbody><tr>'+tdCells+'</tr></tbody>'+
+      '</table>'+
     '</div>'+
 
     '<div class="confidence-wrap">'+
