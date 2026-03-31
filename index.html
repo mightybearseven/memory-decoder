@@ -1,0 +1,852 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RAM PN Decoder</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:#0a0c0f;--surface:#111419;--surface2:#181c22;--border:#1e2530;--border2:#2a3340;
+    --accent:#00d4aa;--warn:#ff9500;--danger:#ff3b30;--text:#e8edf3;--text2:#8a97a8;--text3:#4a5568;
+    --mono:'IBM Plex Mono',monospace;--sans:'IBM Plex Sans',sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{background:var(--bg);color:var(--text);font-family:var(--sans);min-height:100vh;overflow-x:hidden;}
+  body::before{content:'';position:fixed;inset:0;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,.04) 2px,rgba(0,0,0,.04) 4px);pointer-events:none;z-index:1000;}
+  header{border-bottom:1px solid var(--border);padding:20px 32px;display:flex;align-items:center;gap:16px;background:var(--surface);}
+  .logo-mark{width:36px;height:36px;background:var(--accent);display:grid;place-items:center;font-family:var(--mono);font-weight:700;font-size:14px;color:#000;clip-path:polygon(0 0,100% 0,100% 70%,70% 100%,0 100%);flex-shrink:0;}
+  header h1{font-family:var(--mono);font-size:15px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;}
+  header .sub{font-family:var(--mono);font-size:11px;color:var(--text3);letter-spacing:.08em;text-transform:uppercase;}
+  .badge{margin-left:auto;font-family:var(--mono);font-size:10px;color:var(--accent);border:1px solid var(--accent);padding:3px 8px;letter-spacing:.1em;text-transform:uppercase;white-space:nowrap;}
+  main{max-width:920px;margin:0 auto;padding:40px 32px;}
+  .input-label{font-family:var(--mono);font-size:11px;color:var(--text3);letter-spacing:.12em;text-transform:uppercase;margin-bottom:10px;display:block;}
+  .input-row{display:flex;border:1px solid var(--border2);background:var(--surface);transition:border-color .2s;}
+  .input-row:focus-within{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent);}
+  .input-prefix{font-family:var(--mono);font-size:12px;color:var(--text3);padding:0 14px;display:flex;align-items:center;border-right:1px solid var(--border2);background:var(--surface2);letter-spacing:.05em;white-space:nowrap;}
+  #pn-input{flex:1;background:transparent;border:none;outline:none;padding:14px 16px;font-family:var(--mono);font-size:18px;font-weight:600;color:var(--text);letter-spacing:.08em;text-transform:uppercase;min-width:0;}
+  #pn-input::placeholder{color:var(--text3);font-weight:400;text-transform:none;}
+  #decode-btn{background:var(--accent);color:#000;border:none;padding:0 28px;font-family:var(--mono);font-size:12px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;cursor:pointer;transition:background .15s;white-space:nowrap;}
+  #decode-btn:hover{background:#00f0c0;}
+  #decode-btn:active{transform:scale(.98);}
+  .examples{margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;}
+  .example-chip{font-family:var(--mono);font-size:11px;color:var(--text3);border:1px solid var(--border);padding:4px 10px;cursor:pointer;transition:all .15s;letter-spacing:.05em;}
+  .example-chip:hover{color:var(--accent);border-color:var(--accent);}
+  #results{display:none;}
+  #results.visible{display:block;}
+
+  /* sales one-liner */
+  .oneliner-wrap{background:var(--surface2);border:1px solid var(--border2);padding:16px 18px;margin-bottom:20px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;}
+  .oneliner-label{font-family:var(--mono);font-size:10px;color:var(--text3);letter-spacing:.12em;text-transform:uppercase;white-space:nowrap;}
+  .oneliner-text{font-family:var(--mono);font-size:13px;font-weight:600;color:var(--text);flex:1;line-height:1.5;min-width:0;word-break:break-word;}
+  .copy-btn{background:transparent;border:1px solid var(--border2);color:var(--text3);font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;padding:6px 14px;cursor:pointer;transition:all .15s;white-space:nowrap;flex-shrink:0;}
+  .copy-btn:hover{border-color:var(--accent);color:var(--accent);}
+  .copy-btn.copied{border-color:var(--accent);color:var(--accent);}
+
+  .mfr-banner{display:flex;align-items:center;gap:12px;padding:16px 20px;border:1px solid var(--border2);background:var(--surface);margin-bottom:20px;flex-wrap:wrap;}
+  .mfr-dot{width:8px;height:8px;flex-shrink:0;}
+  .mfr-name{font-family:var(--mono);font-size:13px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;}
+  .mfr-pn{font-family:var(--mono);font-size:13px;color:var(--text2);margin-left:auto;letter-spacing:.05em;word-break:break-all;}
+  .confidence-wrap{margin-bottom:24px;}
+  .confidence-bar{height:3px;background:var(--border);}
+  .confidence-fill{height:100%;transition:width .6s cubic-bezier(.4,0,.2,1);width:0%;}
+  .confidence-label{font-family:var(--mono);font-size:10px;color:var(--text3);letter-spacing:.08em;text-transform:uppercase;margin-top:5px;display:flex;justify-content:space-between;}
+  .section-title{font-family:var(--mono);font-size:10px;color:var(--text3);letter-spacing:.15em;text-transform:uppercase;margin-bottom:12px;}
+  .pn-annotations{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:10px;margin-bottom:24px;}
+  .pn-anno{border:1px solid var(--border);background:var(--surface);padding:12px;}
+  .pn-anno-seg{font-family:var(--mono);font-size:15px;font-weight:700;letter-spacing:.08em;margin-bottom:4px;}
+  .pn-anno-label{font-family:var(--mono);font-size:9px;color:var(--text3);letter-spacing:.1em;text-transform:uppercase;margin-bottom:4px;}
+  .pn-anno-val{font-family:var(--sans);font-size:12px;color:var(--text2);line-height:1.4;}
+  .spec-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:1px;background:var(--border);border:1px solid var(--border);margin-bottom:24px;}
+  .spec-cell{background:var(--surface);padding:14px 16px;transition:background .15s;}
+  .spec-cell:hover{background:var(--surface2);}
+  .spec-field{font-family:var(--mono);font-size:10px;color:var(--text3);letter-spacing:.1em;text-transform:uppercase;margin-bottom:5px;}
+  .spec-value{font-family:var(--mono);font-size:14px;font-weight:600;color:var(--text);line-height:1.3;}
+  .spec-value.hl{color:var(--accent);}
+  .spec-value.unknown{color:var(--text3);font-style:italic;font-size:12px;font-weight:400;}
+  .notes-box{border:1px solid var(--border2);background:var(--surface);padding:16px 20px;margin-bottom:20px;}
+  .notes-box .nt{font-family:var(--mono);font-size:10px;color:var(--text3);letter-spacing:.12em;text-transform:uppercase;margin-bottom:8px;}
+  .notes-box p{font-family:var(--sans);font-size:13px;color:var(--text2);line-height:1.6;}
+  .warn-box{border:1px solid rgba(255,149,0,.35);background:rgba(255,149,0,.05);padding:16px 20px;margin-bottom:20px;}
+  .warn-box .wt{font-family:var(--mono);font-size:10px;color:var(--warn);letter-spacing:.12em;text-transform:uppercase;margin-bottom:8px;}
+  .warn-box p{font-family:var(--sans);font-size:13px;color:var(--text2);line-height:1.6;margin-top:8px;}
+  #error{display:none;border:1px solid rgba(255,59,48,.4);background:rgba(255,59,48,.05);padding:16px 20px;margin-bottom:20px;font-family:var(--mono);font-size:13px;color:var(--danger);}
+  #error.visible{display:block;}
+  .divider{height:1px;background:var(--border);margin:24px 0;}
+  @media(max-width:600px){main{padding:24px 16px;}header{padding:16px;}.mfr-pn{display:none;}#decode-btn{padding:0 16px;}}
+</style>
+</head>
+<body>
+<header>
+  <div class="logo-mark">PN</div>
+  <div><h1>RAM Decoder</h1><div class="sub">Memory Part Number Analysis</div></div>
+  <div class="badge">Offline · No API</div>
+</header>
+<main>
+  <div style="margin-bottom:32px">
+    <label class="input-label" for="pn-input">Enter Part Number</label>
+    <div class="input-row">
+      <div class="input-prefix">PN //</div>
+      <input type="text" id="pn-input" placeholder="M386A8K40BM2-CTD" autocomplete="off" autocorrect="off" spellcheck="false">
+      <button id="decode-btn" onclick="decode()">DECODE</button>
+    </div>
+    <div class="examples">
+      <span class="input-label" style="margin-bottom:0">try:</span>
+      <span class="example-chip" onclick="setPN('M386A8K40BM2-CTD')">Samsung LRDIMM</span>
+      <span class="example-chip" onclick="setPN('M393A4K40CB2-CTD')">Samsung RDIMM</span>
+      <span class="example-chip" onclick="setPN('M471A1K43DB1-CTD')">Samsung SODIMM</span>
+      <span class="example-chip" onclick="setPN('HMA82GR7CJR8N-VK')">SK Hynix RDIMM</span>
+      <span class="example-chip" onclick="setPN('HMA81GU6CJR8N-VK')">SK Hynix UDIMM</span>
+      <span class="example-chip" onclick="setPN('MTA18ASF2G72PDZ-2G6E1')">Micron RDIMM</span>
+      <span class="example-chip" onclick="setPN('MTA8ATF1G64HZ-3G2J')">Micron SODIMM</span>
+      <span class="example-chip" onclick="setPN('KSM32RS8/8HDR')">Kingston Server</span>
+      <span class="example-chip" onclick="setPN('KVR32N22S8/8')">Kingston Value</span>
+    </div>
+  </div>
+  <div id="error"></div>
+  <div id="results"></div>
+</main>
+
+<script>
+'use strict';
+
+// ═══════════════════════════════════════════════════════
+// RANK DERIVATION
+// Rank = (total module depth) / (single chip depth)
+// We infer from: module depth code, bit org, package type
+// ═══════════════════════════════════════════════════════
+function deriveRank(depthCode, bitOrgCode, pkgCode, modType) {
+  // For Kingston KSM we get rank directly — handled separately
+  // Samsung depth codes ending in K = 8Gb die chips
+  // Package B or D = DDP (2 stacked die per chip slot) → doubles rank
+  var dc = (depthCode||'').toUpperCase();
+  var bo = (bitOrgCode||'').toUpperCase(); // '0'=x4,'3'=x8,'4'=x16
+  var pk = (pkgCode||'').toUpperCase();    // 'M'=single,'B'=DDP,'2'=2H TSV,'4'=4H TSV
+
+  // Chips per side derived from bit org
+  // A 72-bit ECC bus with x4 chips = 18 chips per rank
+  // A 72-bit ECC bus with x8 chips = 9 chips per rank
+  // depth per rank chip (in GB-equivalent):
+  //   x4 chip, 8Gb die  → 2GB/rank slot, 18 slots → 4GB per rank... 
+  // Simpler: use known depth→rank tables
+
+  // Samsung-style: depth code maps to total GB, we know die density from K/G suffix
+  // Then: ranks = total_GB / (die_density_gb × chips_per_rank_gb_contribution)
+  // chips per rank: x4=18, x8=9, x16=4 (for 72-bit bus)
+  // For x64 bus: x4=16, x8=8, x16=4
+
+  var is8gbDie = dc.endsWith('K') || dc.endsWith('B');
+  var diGb = is8gbDie ? 8 : 4; // Gb per die
+
+  // Map depth code to total module GB
+  var depMap = {
+    '56':0.25,'51':0.5,
+    '1G':8,'2G':16,'4G':32,'8G':64,'AG':128,
+    '1K':8,'2K':16,'4K':32,'8K':64,'AK':128,'BK':256,
+  };
+  var totalGb = depMap[dc]; // in GB (module total)
+  if (!totalGb) return null;
+
+  // chip capacity per rank slot in GB:
+  // die density (Gb) / 8 = GB per die
+  var dieGb = diGb / 8; // GB per die
+
+  // chips per rank depends on bus width
+  var isECC = modType && (modType.toLowerCase().includes('rdimm') || modType.toLowerCase().includes('lrdimm') || modType.toLowerCase().includes('ecc'));
+  var busWidth = isECC ? 72 : 64;
+  var chipWidth = bo==='0'?4 : bo==='3'?8 : bo==='4'?16 : 8; // bits
+  var chipsPerRank = busWidth / chipWidth;
+
+  // GB per rank = chips_per_rank × die_gb
+  var gbPerRank = chipsPerRank * dieGb;
+
+  // DDP (pkg B or D) = 2 dies per chip package → double density per slot
+  var dieMultiplier = (pk==='B'||pk==='D') ? 2 : (pk==='2') ? 2 : (pk==='4') ? 4 : 1;
+  gbPerRank = gbPerRank * dieMultiplier;
+
+  var ranks = Math.round(totalGb / gbPerRank);
+  if (ranks < 1) ranks = 1;
+  if (ranks > 8) ranks = null; // sanity
+
+  if (!ranks) return null;
+
+  // Express as NRxW format
+  var w = chipWidth;
+  return ranks + 'Rx' + w;
+}
+
+// Hynix rank derivation (similar logic, using their depth/die codes)
+function deriveRankHynix(depCode, dieDensity, dataWidthCode, modType) {
+  // depCode: '1G','2G','4G','8G','AG' → GB
+  // dieDensity: '4Gb','8Gb','16Gb'
+  // dataWidthCode: '6'/'1'/'2'=x64bus, '7'/'8'/'9'=x72bus
+  var depMap={'256MB':null,'512MB':null,'1GB':8,'2GB':16,'4GB':32,'8GB':64,'16GB':128};
+  var totalGb = depMap[depCode];
+  if (!totalGb) return null;
+
+  var dieGb = dieDensity==='8Gb'?1:dieDensity==='16Gb'?2:0.5; // GB
+  var busWidth = ['7','8','9'].includes(dataWidthCode)?72:64;
+
+  // bit org from variant not always known — default to x8 if unknown
+  return null; // let variant parsing handle it below
+}
+
+// Micron rank: derive from die count (num_dies in PN) + module type
+function deriveRankMicron(numDies, modType, pkgCode) {
+  // numDies is number printed in PN (e.g. 18 = 18 chips)
+  // for RDIMM/ECC: 18 chips / 9 chips-per-rank(x8) = 2R, or 18/18(x4)=1R
+  // pkgCode tells us stacking: SS/TS=DDP(×2), SQ/TQ=QDP(×4)
+  if (!numDies) return null;
+  var n = parseInt(numDies);
+  if (!n) return null;
+  var stk = /[SZ]S|TS/.test(pkgCode)?2:/[SZ]Q|TQ/.test(pkgCode)?4:1;
+  var effectiveDies = n * stk;
+  // heuristic: 36 effective = 4Rx4 or 2Rx8; 18=2Rx4 or 1Rx8; 9=1Rx8
+  // We can only give a range without bit org
+  if (effectiveDies === 36) return '4Rx4 or 2Rx8';
+  if (effectiveDies === 18) return '2Rx4 or 1Rx8';
+  if (effectiveDies === 9)  return '1Rx8';
+  if (effectiveDies === 8)  return '1Rx8 (non-ECC)';
+  if (effectiveDies === 16) return '2Rx8 (non-ECC)';
+  if (effectiveDies === 72) return '8Rx4';
+  return effectiveDies + ' dies total';
+}
+
+
+// ═══════════════════════════════════════════════════════
+// SAMSUNG
+// ═══════════════════════════════════════════════════════
+var SAMSUNG=(function(){
+  var DT={
+    '38':{type:'LRDIMM',        pins:'288-pin',ecc:true, reg:true, lr:true,  form:'DIMM',   gen:'DDR4'},
+    '39':{type:'RDIMM',         pins:'288-pin',ecc:true, reg:true, lr:false, form:'DIMM',   gen:'DDR4'},
+    '93':{type:'RDIMM',         pins:'288-pin',ecc:true, reg:true, lr:false, form:'DIMM',   gen:'DDR4'},
+    '91':{type:'ECC UDIMM',     pins:'288-pin',ecc:true, reg:false,lr:false, form:'DIMM',   gen:'DDR4'},
+    '92':{type:'VLP RDIMM',     pins:'288-pin',ecc:true, reg:true, lr:false, form:'DIMM',   gen:'DDR4'},
+    '78':{type:'Non-ECC UDIMM', pins:'288-pin',ecc:false,reg:false,lr:false, form:'DIMM',   gen:'DDR4'},
+    '71':{type:'SODIMM',        pins:'260-pin',ecc:false,reg:false,lr:false, form:'SODIMM', gen:'DDR4'},
+    '74':{type:'ECC SODIMM',    pins:'260-pin',ecc:true, reg:false,lr:false, form:'SODIMM', gen:'DDR4'},
+    '47':{type:'SODIMM',        pins:'260-pin',ecc:false,reg:false,lr:false, form:'SODIMM', gen:'DDR4'},
+    '72':{type:'RDIMM',         pins:'240-pin',ecc:true, reg:true, lr:false, form:'DIMM',   gen:'DDR3'},
+    '76':{type:'LRDIMM',        pins:'240-pin',ecc:true, reg:true, lr:true,  form:'DIMM',   gen:'DDR3'},
+    '51':{type:'Non-ECC UDIMM', pins:'240-pin',ecc:false,reg:false,lr:false, form:'DIMM',   gen:'DDR3'},
+    '53':{type:'ECC UDIMM',     pins:'240-pin',ecc:true, reg:false,lr:false, form:'DIMM',   gen:'DDR3'},
+    '41':{type:'SODIMM',        pins:'204-pin',ecc:false,reg:false,lr:false, form:'SODIMM', gen:'DDR3'},
+    '44':{type:'ECC SODIMM',    pins:'204-pin',ecc:true, reg:false,lr:false, form:'SODIMM', gen:'DDR3'},
+  };
+  var DEP={
+    '56':'256M','51':'512M','1G':'1G','2G':'2G','4G':'4G','8G':'8G','AG':'16G',
+    '1K':'1G','2K':'2G','4K':'4G','8K':'8G','AK':'16G','BK':'32G',
+  };
+  var BOG={'0':'x4','3':'x8','4':'x16'};
+  var CREV={'A':'2nd Gen','B':'3rd Gen','C':'4th Gen','D':'5th Gen','E':'6th Gen','F':'7th Gen','G':'8th Gen','H':'9th Gen'};
+  var PKG={'M':'FBGA (Flip Chip)','B':'FBGA DDP (stacked)','2':'FBGA 2H TSV','4':'FBGA 4H TSV','A':'FBGA','C':'FBGA','D':'FBGA DDP'};
+  var SPD={
+    'PB':'DDR4-2133 CL15','RB':'DDR4-2133 CL17','RC':'DDR4-2400 CL17','TC':'DDR4-2400 CL19',
+    'TD':'DDR4-2666 CL19','WD':'DDR4-2666 CL22','TF':'DDR4-2133 CL15','UH':'DDR4-2400 CL17',
+    'VK':'DDR4-2666 CL19','VN':'DDR4-2666 CL22','WM':'DDR4-2933 CL21','XN':'DDR4-3200 CL22',
+    'CPB':'DDR4-2133 CL15','CRC':'DDR4-2400 CL17','CTD':'DDR4-2666 CL19',
+    'CRB':'DDR4-2400','CTC':'DDR4-2133','CWD':'DDR4-2666 CL22',
+    'EE':'DDR3-1333 CL9','FC':'DDR3-1600 CL11','FD':'DDR3-1600 CL11','HC':'DDR3-1600 CL11',
+  };
+  var CAP={'1G':'8GB','2G':'16GB','4G':'32GB','8G':'64GB','16G':'128GB'};
+
+  function decode(pn){
+    if(!/^M[0-9]/i.test(pn)) return null;
+    var parts=pn.split('-'),base=parts[0].toUpperCase(),suf=(parts[1]||'').toUpperCase();
+    if(base.length<9) return null;
+    var dc=base.substring(1,3),info=DT[dc];
+    var dtch=base[3];
+    var gen=info?info.gen:(dtch==='A'?'DDR4':'DDR3');
+    var dr=base.substring(4,6),dep=DEP[dr];
+    var bc=base[6],boc=base[7],crc=base[8],pkc=base[9]||'',pcbr=base[10]||'';
+    var spd='',temp='';
+    if(suf){
+      spd=SPD[suf]||SPD[suf.substring(1,3)]||SPD[suf.substring(0,2)]||suf;
+      temp=suf[0]==='C'?'Commercial (0–85°C)':suf[0]==='I'?'Industrial (-40–95°C)':suf[0];
+    }
+    var isK=dr.endsWith('K')||dr.endsWith('B');
+    var capKey=dep?dep.replace(/ .*/,''):null;
+    var cap=capKey?(CAP[capKey]||null):null;
+
+    // Derive rank
+    var rankStr=deriveRank(dr, boc, pkc, info?info.type:'');
+    // For TSV packages, double-check
+    if(pkc==='4') {
+      // 4H TSV — 4 dies per chip, so multiply rank by 2 again vs DDP
+      // e.g. AK + 4H TSV = 8Rx4 for 128GB LRDIMM
+      var baseRank=deriveRank(dr, boc, 'M', info?info.type:'');
+      if(baseRank) rankStr = (parseInt(baseRank)*4)+'Rx'+(BOG[boc]||'?');
+    }
+
+    return {
+      manufacturer:'Samsung',
+      confidence:info?96:72,
+      pn_display:pn.toUpperCase(),
+      segments:[
+        {seg:'M',    label:'Product Type',   value:'Memory Module'},
+        {seg:dc,     label:'DIMM Type',      value:info?info.type+' · '+info.pins:'Unknown ('+dc+')'},
+        {seg:dtch,   label:'DRAM Standard',  value:gen},
+        {seg:dr,     label:'Memory Depth',   value:dep||dr},
+        {seg:bc,     label:'Banks/Interface',value:bc==='4'?'16 banks, POD 1.2V':bc},
+        {seg:boc,    label:'Bit Org',        value:BOG[boc]||boc},
+        {seg:crc,    label:'Component Rev',  value:CREV[crc]||crc},
+        {seg:pkc,    label:'Package',        value:PKG[pkc]||pkc||'?'},
+        {seg:pcbr,   label:'PCB Revision',   value:pcbr||'none'},
+        ...(suf?[{seg:suf,label:'Speed Suffix',value:spd||suf}]:[]),
+      ].filter(s=>s.seg),
+      specs:{
+        'Manufacturer':    'Samsung',
+        'DRAM Standard':   gen,
+        'Module Type':     info?info.type:'Unknown ('+dc+')',
+        'Form Factor':     info?info.form:'?',
+        'Pin Count':       info?info.pins:'?',
+        'Capacity':        cap||'?',
+        'Speed':           spd||(suf||'?'),
+        'Rank':            rankStr||'?',
+        'ECC':             info?(info.ecc?'Yes':'No'):'?',
+        'Registered':      info?(info.reg?'Yes':'No'):'?',
+        'Load Reduced':    info?(info.lr?'Yes':'No'):'No',
+        'Bit Organization':BOG[boc]||boc,
+        'Die Density':     isK?'8Gb':'4Gb',
+        'Package':         PKG[pkc]||pkc||'?',
+        'Component Rev':   CREV[crc]||crc,
+        'Temperature':     temp||'?',
+        'Voltage':         gen==='DDR3L'?'1.35V':gen==='DDR3'?'1.5V':'1.2V',
+      },
+      notes:'Rank is derived from depth + bit organization + package type (DDP doubles rank). Verify against datasheet for critical applications.',
+    };
+  }
+  return{decode};
+})();
+
+
+// ═══════════════════════════════════════════════════════
+// SK HYNIX
+// ═══════════════════════════════════════════════════════
+var HYNIX=(function(){
+  var DEN4={'4':'4Gb','8':'8Gb','A':'16Gb','B':'32Gb'};
+  var DEN3={'1':'1Gb','2':'2Gb','4':'4Gb','8':'8Gb'};
+  var DEP={'25':'256MB','51':'512MB','1G':'1GB','2G':'2GB','4G':'4GB','8G':'8GB','AG':'16GB','BG':'32GB','41':'512MB','42':'1GB','81':'1GB','82':'2GB','84':'4GB'};
+  var MT4={
+    '':{type:'UDIMM',    pins:'288-pin',ecc:false,reg:false,lr:false},
+    'U':{type:'SODIMM',  pins:'260-pin',ecc:false,reg:false,lr:false},
+    'S':{type:'RDIMM',   pins:'288-pin',ecc:true, reg:true, lr:false},
+    'R':{type:'RDIMM',   pins:'288-pin',ecc:true, reg:true, lr:false},
+    'L':{type:'LRDIMM',  pins:'288-pin',ecc:true, reg:true, lr:true},
+    'E':{type:'ECC UDIMM',pins:'288-pin',ecc:true,reg:false,lr:false},
+  };
+  var MT3={
+    '1':{type:'RDIMM',   pins:'240-pin',ecc:true, reg:true, lr:false},
+    '4':{type:'SODIMM',  pins:'204-pin',ecc:false,reg:false,lr:false},
+    '5':{type:'RDIMM',   pins:'240-pin',ecc:true, reg:true, lr:false},
+    '6':{type:'LRDIMM',  pins:'240-pin',ecc:true, reg:true, lr:true},
+    '8':{type:'ECC UDIMM',pins:'240-pin',ecc:true,reg:false,lr:false},
+    'U':{type:'UDIMM',   pins:'240-pin',ecc:false,reg:false,lr:false},
+    'S':{type:'RDIMM',   pins:'240-pin',ecc:true, reg:true, lr:false},
+  };
+  var DW={'6':'x64 (LP)','1':'x64 (VLP)','2':'x64 (ULP)','7':'x72 / ECC (LP)','8':'x72 / ECC (VLP)','9':'x72 / ECC (ULP)'};
+  var SP4={'TF':'DDR4-2133 CL15','UH':'DDR4-2400 CL17','UL':'DDR4-2400 CL20','VK':'DDR4-2666 CL19','VN':'DDR4-2666 CL22','WM':'DDR4-2933 CL21','XN':'DDR4-3200 CL22'};
+  var SP3={'PB':'DDR3-1600 CL11','PC':'DDR3-1600','YG':'DDR3-1333 CL9','YH':'DDR3-1600 CL11'};
+  var DR={'A':'A-die','B':'B-die','C':'C-die','D':'D-die','E':'E-die','F':'F-die','J':'J-die','M':'M-die'};
+  var D2C={'256MB':null,'512MB':null,'1GB':'8GB','2GB':'16GB','4GB':'32GB','8GB':'64GB','16GB':'128GB'};
+
+  function decode(pn){
+    var u=pn.toUpperCase();
+    if(!u.startsWith('HM')) return null;
+    var gc=u[2],isDDR4=gc==='A',isDDR3=gc==='T';
+    if(!isDDR4&&!isDDR3) return null;
+    var parts=pn.split('-'),base=parts[0].toUpperCase(),suf=(parts[1]||'').toUpperCase();
+    var dc=base[3],dr=base.substring(4,6),mtc=base[6],dwc=base[7],vr=base.substring(8);
+    var den=(isDDR4?DEN4:DEN3)[dc]||dc;
+    var dep=DEP[dr]||dr;
+    var mti=(isDDR4?MT4:MT3)[mtc]||(isDDR4?MT4:MT3)[''];
+    var dw=DW[dwc]||dwc;
+    var spd=suf?((isDDR4?SP4:SP3)[suf]||suf):'';
+    var drch=vr[0]||'',drev=DR[drch]||drch;
+    // Parse bit org from variant
+    var bo=null,boch=null;
+    if(/R8|F8/.test(vr)){bo='x8';boch='8';}
+    else if(/R4|F4/.test(vr)){bo='x4';boch='4';}
+    else if(/R1|F1/.test(vr)){bo='x16';boch='16';}
+    var cap=D2C[dep]||null;
+
+    // Derive rank: need total GB, die density, bit org, bus width
+    var rankStr=null;
+    if(cap&&den&&bo){
+      var totalGB=parseInt(cap);
+      var dieGB=den==='8Gb'?1:den==='16Gb'?2:0.5;
+      var busW=['7','8','9'].includes(dwc)?72:64;
+      var chipW=boch==='4'?4:boch==='8'?8:boch==='16'?16:8;
+      var chipsPerRank=busW/chipW;
+      var gbPerRank=chipsPerRank*dieGB;
+      // Check for DDP in variant name (some HMT variants are DDP)
+      var isDDP=/DDP|SS/.test(vr);
+      if(isDDP) gbPerRank*=2;
+      var ranks=Math.round(totalGB/gbPerRank);
+      if(ranks>=1&&ranks<=8) rankStr=ranks+'Rx'+chipW;
+    }
+
+    return {
+      manufacturer:'SK Hynix',
+      confidence:mti?88:70,
+      pn_display:pn.toUpperCase(),
+      segments:[
+        {seg:'HM',label:'Manufacturer',    value:'SK Hynix DRAM Module'},
+        {seg:gc,  label:'DRAM Generation', value:isDDR4?'DDR4':'DDR3'},
+        {seg:dc,  label:'Die Density',     value:den},
+        {seg:dr,  label:'Memory Depth',    value:dep},
+        {seg:mtc, label:'Module Type',     value:mti?mti.type:mtc},
+        {seg:dwc, label:'Data Width',      value:dw},
+        {seg:vr,  label:'Die/Org Variant', value:drev+(bo?' · '+bo:'')},
+        ...(suf?[{seg:suf,label:'Speed Grade',value:spd||suf}]:[]),
+      ].filter(s=>s.seg),
+      specs:{
+        'Manufacturer':    'SK Hynix',
+        'DRAM Standard':   isDDR4?'DDR4':'DDR3',
+        'Module Type':     mti?mti.type:'?',
+        'Form Factor':     mti?(mti.pins.includes('260')||mti.pins.includes('204')?'SODIMM':'DIMM'):'?',
+        'Pin Count':       mti?mti.pins:'?',
+        'Capacity':        cap||'?',
+        'Speed':           spd||(suf||'?'),
+        'Rank':            rankStr||'?',
+        'ECC':             mti?(mti.ecc?'Yes':'No'):'?',
+        'Registered':      mti?(mti.reg?'Yes':'No'):'?',
+        'Load Reduced':    mti?(mti.lr?'Yes':'No'):'No',
+        'Die Density':     den,
+        'Bit Organization':bo||'?',
+        'Die Revision':    drev,
+        'Data Width':      dw,
+        'Voltage':         isDDR4?'1.2V':'1.5V',
+      },
+      notes:null,
+    };
+  }
+  return{decode};
+})();
+
+
+// ═══════════════════════════════════════════════════════
+// MICRON
+// ═══════════════════════════════════════════════════════
+var MICRON=(function(){
+  var VOLT={'A':'1.2V (DDR4)','B':'1.1V','F':'1.5V (DDR3)','J':'1.35V (DDR3L)'};
+  var PKG={
+    'TF':'FBGA','TS':'FBGA DDP','TQ':'FBGA QDP',
+    'SF':'FBGA w/temp sensor','SS':'DDP w/temp sensor','SQ':'QDP w/temp sensor',
+    'DF':'VLP FBGA','DS':'VLP DDP','DQ':'VLP QDP',
+    'SZF':'FBGA heat spreader','SZS':'DDP heat spreader','AS':'FBGA DDP','AF':'FBGA',
+  };
+  var SP4={'1G6':'DDR4-1600 CL11','1G9':'DDR4-1866 CL13','2G1':'DDR4-2133 CL15','2S1':'DDR4-2133 CL16','2G4':'DDR4-2400 CL16','2G6':'DDR4-2666 CL19','3G2':'DDR4-3200 CL22'};
+  var SP3={'1G3':'DDR3-1333 CL9','1G6':'DDR3-1600 CL11','1G8':'DDR3-1866','2G1':'DDR3-2133'};
+  var DEPTH={'51':'512MB','1G':'1GB','2G':'2GB','4G':'4GB','8G':'8GB','AG':'16GB'};
+  var D2C={'512MB':null,'1GB':'8GB','2GB':'16GB','4GB':'32GB','8GB':'64GB','16GB':'128GB'};
+
+  function modType(o){
+    if(/LDZ|LZ/.test(o))         return{type:'LRDIMM',   pins:'288-pin',ecc:true, reg:true, lr:true};
+    if(/PDZ|PZ|RDZ|RZ/.test(o)) return{type:'RDIMM',    pins:'288-pin',ecc:true, reg:true, lr:false};
+    if(/HZ|HG/.test(o))          return{type:'SODIMM',   pins:'260-pin',ecc:false,reg:false,lr:false};
+    if(/AZ/.test(o))              return{type:'SODIMM',   pins:'260-pin',ecc:false,reg:false,lr:false};
+    if(/FZ|UZ|FG/.test(o))      return{type:'ECC UDIMM', pins:'288-pin',ecc:true, reg:false,lr:false};
+    return null;
+  }
+
+  function decode(pn){
+    var u=pn.toUpperCase();
+    if(!u.startsWith('MT')) return null;
+    var parts=pn.split('-'),base=parts[0].toUpperCase(),suf=(parts[1]||'').toUpperCase();
+    var vc=base[2],isDDR4=vc==='A',isDDR3=vc==='F'||vc==='J';
+    if(!isDDR4&&!isDDR3) return null;
+    var dr=base.substring(3,5);
+    var fc=base[5];
+    var pkr=base.substring(6,8);
+    var depRaw=base.substring(8,10);
+    var dep=DEPTH[depRaw]||depRaw;
+    var wr=base.substring(10,12);
+    var opts=base.substring(12);
+    var mi=modType(opts);
+    var pkg=PKG[pkr]||pkr;
+    var spd=suf?((isDDR4?SP4:SP3)[suf.substring(0,3)]||suf):'';
+    var cap=D2C[dep]||null;
+    var ecc=wr==='72';
+    var numDies=parseInt(dr)||null;
+
+    // Rank from die count + package stacking
+    var rankStr=deriveRankMicron(numDies, mi?mi.type:'', pkr);
+
+    return {
+      manufacturer:'Micron Technology',
+      confidence:mi?85:72,
+      pn_display:pn.toUpperCase(),
+      segments:[
+        {seg:'MT',       label:'Manufacturer',   value:'Micron Technology'},
+        {seg:vc,         label:'Voltage / Gen',  value:VOLT[vc]||vc},
+        {seg:dr,         label:'Die Count',      value:(numDies||dr)+' dies'},
+        {seg:fc,         label:'Product Family', value:'DDR SDRAM'},
+        {seg:pkr,        label:'Package',        value:pkg},
+        {seg:depRaw,     label:'Depth',          value:dep},
+        {seg:wr,         label:'Data Width',     value:wr==='72'?'x72 (ECC)':wr==='64'?'x64 (non-ECC)':wr},
+        {seg:opts,       label:'Module Options', value:mi?mi.type:opts},
+        ...(suf?[{seg:suf,label:'Speed / Rev',value:spd||suf}]:[]),
+      ].filter(s=>s.seg),
+      specs:{
+        'Manufacturer':  'Micron Technology',
+        'DRAM Standard': isDDR4?'DDR4':(vc==='J'?'DDR3L':'DDR3'),
+        'Module Type':   mi?mi.type:'?',
+        'Form Factor':   mi?(mi.pins.includes('260')?'SODIMM':'DIMM'):'?',
+        'Pin Count':     mi?mi.pins:'?',
+        'Capacity':      cap||'?',
+        'Speed':         spd||(suf||'?'),
+        'Rank':          rankStr||'?',
+        'ECC':           mi?(mi.ecc?'Yes':'No'):(ecc?'Yes':'No'),
+        'Registered':    mi?(mi.reg?'Yes':'No'):'?',
+        'Load Reduced':  mi?(mi.lr?'Yes':'No'):'No',
+        'Die Count':     String(numDies||dr),
+        'Package':       pkg,
+        'Data Width':    wr==='72'?'x72 (ECC)':wr==='64'?'x64 (non-ECC)':wr,
+        'Voltage':       VOLT[vc]||'?',
+      },
+      notes:rankStr&&rankStr.includes('or')?'Rank is ambiguous from the PN alone — bit organization not fully encoded in Micron module numbers. Verify rank from label or SPD.':null,
+    };
+  }
+  return{decode};
+})();
+
+
+// ═══════════════════════════════════════════════════════
+// KINGSTON
+// ═══════════════════════════════════════════════════════
+var KINGSTON=(function(){
+  var MFR={'H':'SK Hynix','M':'Micron','S':'Samsung','N':'Nanya','K':'Kingston','I':'ISSI'};
+  var DR ={'A':'A-die','B':'B-die','C':'C-die','D':'D-die','E':'E-die','F':'F-die','M':'M-die','J':'J-die'};
+  var RNK={'S':'1Rx (Single)','D':'2Rx (Dual)','Q':'4Rx (Quad)','O':'8Rx (Octal)'};
+  var WID={'4':'x4','8':'x8','1':'x16'};
+  var KST={'R':'RDIMM','U':'UDIMM','S':'SODIMM','L':'LRDIMM','E':'ECC UDIMM','F':'FBDIMM'};
+  var KVT={'N':'Non-ECC UDIMM','E':'ECC UDIMM','R':'RDIMM','S':'SODIMM','L':'LRDIMM'};
+
+  function rankFromKSM(rk,wc){
+    var n={'S':'1','D':'2','Q':'4','O':'8'}[rk]||'?';
+    var w=WID[wc]||'?';
+    return n+'Rx'+w;
+  }
+
+  function ksm(pn){
+    var u=pn.toUpperCase().replace('KSM','');
+    var sm=u.match(/^(\d+)/);if(!sm)return null;
+    var sr=sm[1],rest=u.substring(sr.length);
+    var tc=rest[0]||'',rk=rest[1]||'',wc=rest[2]||'';
+    var si=rest.indexOf('/'),af=si>=0?rest.substring(si+1):'';
+    var cm=af.match(/^(\d+)/),cr=cm?cm[1]:'?',meta=cm?af.substring(cm[1].length):af;
+    var mc=meta[0]||'',dc=meta[1]||'',rc=meta[2]||'';
+    var mt=KST[tc]||tc,ec=['R','L','E'].includes(tc),rg=['R','L'].includes(tc);
+    var rankStr=rankFromKSM(rk,wc);
+    return {
+      manufacturer:'Kingston (Server Premier)',confidence:93,pn_display:pn.toUpperCase(),
+      segments:[
+        {seg:'KSM',  label:'Product Line', value:'Kingston Server Premier'},
+        {seg:sr,     label:'Speed',        value:'DDR4-'+sr+'00'},
+        {seg:tc,     label:'Module Type',  value:mt},
+        {seg:rk,     label:'Rank',         value:RNK[rk]||rk},
+        {seg:wc,     label:'Bit Org',      value:WID[wc]||wc},
+        {seg:'/'+cr, label:'Capacity',     value:cr+'GB'},
+        {seg:mc,     label:'DRAM Maker',   value:MFR[mc]||mc},
+        {seg:dc,     label:'Die Rev',      value:DR[dc]||dc},
+        {seg:rc,     label:'Reg Flag',     value:rc==='R'?'Registered':rc},
+      ].filter(s=>s.seg),
+      specs:{
+        'Manufacturer':'Kingston','Product Line':'Server Premier (KSM)','DRAM Standard':'DDR4',
+        'Speed':'DDR4-'+sr+'00','Module Type':mt,
+        'Form Factor':tc==='S'?'SODIMM':'DIMM',
+        'Pin Count':tc==='S'?'260-pin':'288-pin',
+        'Capacity':cr+'GB','Rank':rankStr,
+        'ECC':ec?'Yes':'No','Registered':rg?'Yes':'No',
+        'Bit Organization':WID[wc]||wc,
+        'DRAM Manufacturer':MFR[mc]||(mc||'?'),'Die Revision':DR[dc]||(dc||'?'),
+        'Voltage':'1.2V',
+      },
+      notes:'Kingston Server Premier encodes rank, bit org, DRAM manufacturer, and die revision directly — the most information-dense consumer PN format.',
+    };
+  }
+
+  function kvr(pn){
+    var u=pn.toUpperCase().replace('KVR','');
+    var sm=u.match(/^(\d+)/);if(!sm)return null;
+    var sr=sm[1],rest=u.substring(sr.length);
+    var cm=rest.match(/^(\d+)/),cr=cm?cm[1]:'?',rest2=cr!=='?'?rest.substring(cr.length):rest;
+    var tc=rest2[0]||'',rk=rest2[1]||'',wc=rest2[2]||'';
+    var di=Math.max(pn.indexOf('/'),pn.indexOf('-'));
+    var cap=di>=0?(pn.substring(di+1).match(/\d+/)||['?'])[0]:'?';
+    var mt=KVT[tc]||tc,ec=['E','R','L'].includes(tc),rg=['R','L'].includes(tc);
+    var sn=parseInt(sr)*100,gen=sn>=2133?'DDR4':'DDR3';
+    var rankStr=rankFromKSM(rk,wc);
+    return {
+      manufacturer:'Kingston (ValueRAM)',confidence:87,pn_display:pn.toUpperCase(),
+      segments:[
+        {seg:'KVR',  label:'Product Line',value:'Kingston ValueRAM'},
+        {seg:sr,     label:'Speed',       value:gen+'-'+sn},
+        {seg:cr,     label:'CAS Latency', value:'CL'+cr},
+        {seg:tc,     label:'Module Type', value:mt},
+        {seg:rk,     label:'Rank',        value:RNK[rk]||rk},
+        {seg:wc,     label:'Bit Org',     value:WID[wc]||wc},
+        {seg:'/'+cap,label:'Capacity',    value:cap+'GB'},
+      ].filter(s=>s.seg),
+      specs:{
+        'Manufacturer':'Kingston','Product Line':'ValueRAM (KVR)','DRAM Standard':gen,
+        'Speed':gen+'-'+sn,'CAS Latency':'CL'+cr,'Module Type':mt,
+        'Form Factor':tc==='S'?'SODIMM':'DIMM',
+        'Pin Count':tc==='S'?(gen==='DDR4'?'260-pin':'204-pin'):(gen==='DDR4'?'288-pin':'240-pin'),
+        'Capacity':cap+'GB','Rank':rankStr,
+        'ECC':ec?'Yes':'No','Registered':rg?'Yes':'No',
+        'Bit Organization':WID[wc]||wc,'Voltage':gen==='DDR4'?'1.2V':'1.5V',
+      },
+      notes:null,
+    };
+  }
+
+  function kf(pn){
+    var u=pn.toUpperCase().replace('KF','');
+    var sm=u.match(/^(\d+)/);if(!sm)return null;
+    var sr=sm[1],rest=u.substring(sr.length);
+    var cm=rest.match(/^C(\d+)/i),cr=cm?cm[1]:'?';
+    var sn=parseInt(sr)*100,gen=sn>=4800?'DDR5':sn>=2133?'DDR4':'DDR3';
+    var si=pn.indexOf('/'),cap=si>=0?(pn.substring(si+1).match(/\d+/)||['?'])[0]:'?';
+    var km=pn.toUpperCase().match(/K(\d+)$/),kit=km?km[1]+'-stick kit':null;
+    return {
+      manufacturer:'Kingston (FURY)',confidence:80,pn_display:pn.toUpperCase(),
+      segments:[
+        {seg:'KF',    label:'Product Line', value:'Kingston FURY'},
+        {seg:sr,      label:'Speed',        value:gen+'-'+sn},
+        {seg:'C'+cr,  label:'CAS Latency',  value:'CL'+cr},
+        ...(si>=0?[{seg:'/'+cap,label:'Capacity',value:cap+'GB'+(kit?' ('+kit+')':'')}]:[]),
+      ].filter(s=>s.seg),
+      specs:{
+        'Manufacturer':'Kingston','Product Line':'FURY',
+        'DRAM Standard':gen,'Speed':gen+'-'+sn,'CAS Latency':'CL'+cr,
+        'Capacity':cap+'GB'+(kit?' ('+kit+')':''),
+        'Rank':'Not encoded (consumer)',
+        'Form Factor':'DIMM','ECC':'No','Registered':'No',
+        'Voltage':gen==='DDR5'?'1.1V':'1.35V',
+      },
+      notes:'Kingston FURY part numbers do not encode rank — check the product page or module label.',
+    };
+  }
+
+  function decode(pn){
+    var u=pn.toUpperCase();
+    if(u.startsWith('KSM')) return ksm(pn);
+    if(u.startsWith('KVR')) return kvr(pn);
+    if(/^KF[0-9]/.test(u))  return kf(pn);
+    return null;
+  }
+  return{decode};
+})();
+
+
+// ═══════════════════════════════════════════════════════
+// CRUCIAL / BALLISTIX
+// ═══════════════════════════════════════════════════════
+var CRUCIAL=(function(){
+  function decode(pn){
+    var u=pn.toUpperCase();
+    if(!u.startsWith('CT')&&!u.startsWith('BL')) return null;
+    var pfx=u.startsWith('BL')?'BL':'CT';
+    var rest=u.substring(pfx.length);
+    var cm=rest.match(/^(\d+)/);if(!cm)return null;
+    var cap=cm[1],rest2=rest.substring(cap.length);
+    var gm=rest2.match(/^(G[345])/i),gc=gm?gm[1]:null;
+    var gen=gc==='G4'?'DDR4':gc==='G3'?'DDR3':gc==='G5'?'DDR5':null;
+    var parts=pn.split('-'),suf=parts[1]||null;
+    var sod=u.includes('SOD')||u.includes('HZ');
+    return {
+      manufacturer:pfx==='BL'?'Crucial (Ballistix)':'Crucial',
+      confidence:gen?72:50,
+      pn_display:pn.toUpperCase(),
+      segments:[
+        {seg:pfx,    label:'Brand',    value:pfx==='BL'?'Crucial Ballistix':'Crucial'},
+        {seg:cap,    label:'Capacity', value:cap+'GB'},
+        {seg:gc||'', label:'DDR Gen',  value:gen||'?'},
+        ...(suf?[{seg:suf,label:'Speed',value:suf}]:[]),
+      ].filter(s=>s.seg),
+      specs:{
+        'Manufacturer':pfx==='BL'?'Crucial (Ballistix)':'Crucial',
+        'Product Line':pfx==='BL'?'Ballistix':'Standard',
+        'DRAM Standard':gen||'?',
+        'Capacity':cap+'GB','Speed':suf||'?',
+        'Rank':'Not encoded',
+        'Form Factor':sod?'SODIMM':'DIMM',
+        'ECC':'No','Registered':'No',
+        'Voltage':gen==='DDR4'?'1.2V':gen==='DDR3'?'1.5V':'?',
+      },
+      notes:'Crucial part numbers do not encode rank — check the product listing.',
+    };
+  }
+  return{decode};
+})();
+
+
+// ═══════════════════════════════════════════════════════
+// ROUTER
+// ═══════════════════════════════════════════════════════
+function detectAndDecode(pn){
+  var u=pn.trim().toUpperCase();
+  if(/^M[0-9]/.test(u))              return SAMSUNG.decode(pn);
+  if(/^HM[AT]/.test(u))              return HYNIX.decode(pn);
+  if(/^MT/.test(u))                   return MICRON.decode(pn);
+  if(/^KSM|^KVR|^KF[0-9]/.test(u))  return KINGSTON.decode(pn);
+  if(/^CT[0-9]|^BL[0-9]/.test(u))   return CRUCIAL.decode(pn);
+  return null;
+}
+
+
+// ═══════════════════════════════════════════════════════
+// SALES ONE-LINER BUILDER
+// Format: [cap] [gen] [type] [rank] [speed] [ecc] — [mfr] [pn]
+// ═══════════════════════════════════════════════════════
+function buildOneLiner(r){
+  var s=r.specs;
+  var parts=[];
+  var cap  = s['Capacity']&&s['Capacity']!=='?'  ? s['Capacity']  : null;
+  var gen  = s['DRAM Standard']&&s['DRAM Standard']!=='?' ? s['DRAM Standard'] : null;
+  var type = s['Module Type']&&s['Module Type']!=='?' ? s['Module Type'] : null;
+  var rank = s['Rank']&&s['Rank']!=='?' ? s['Rank'] : null;
+  var spd  = s['Speed']&&s['Speed']!=='?' ? s['Speed'] : null;
+  var ecc  = s['ECC']==='Yes' ? 'ECC' : null;
+  var reg  = s['Registered']==='Yes' ? 'Registered' : null;
+  var lr   = s['Load Reduced']==='Yes' ? 'Load Reduced' : null;
+  var volt = s['Voltage']&&s['Voltage']!=='?' ? s['Voltage'] : null;
+
+  if(cap)  parts.push(cap);
+  if(gen)  parts.push(gen);
+  if(type) parts.push(type);
+  if(rank) parts.push(rank);
+  if(spd)  parts.push(spd);
+  if(ecc)  parts.push(ecc);
+  // don't double-up ECC if already in type name
+  if(reg && type && !type.toLowerCase().includes('rdimm') && !type.toLowerCase().includes('lrdimm')) parts.push(reg);
+  if(volt) parts.push(volt);
+  parts.push('—');
+  parts.push(r.manufacturer.replace(/ \(.+\)/,''));
+  parts.push(r.pn_display);
+  return parts.join(' ');
+}
+
+
+// ═══════════════════════════════════════════════════════
+// RENDER
+// ═══════════════════════════════════════════════════════
+var MFC={
+  'Samsung':'#00d4aa','SK Hynix':'#0096ff','Micron Technology':'#ff9500',
+  'Kingston (Server Premier)':'#c8102e','Kingston (ValueRAM)':'#c8102e','Kingston (FURY)':'#c8102e',
+  'Crucial':'#007DB8','Crucial (Ballistix)':'#E31837',
+};
+var HL=new Set(['DRAM Standard','Module Type','Capacity','Speed','Rank','ECC','Registered']);
+
+function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+
+function renderResult(r){
+  var ac=MFC[r.manufacturer]||'#00d4aa';
+  var liner=buildOneLiner(r);
+
+  var annos=r.segments.filter(s=>s.seg&&s.seg.length).map(s=>
+    '<div class="pn-anno">'+
+    '<div class="pn-anno-seg" style="color:'+ac+'">'+esc(s.seg)+'</div>'+
+    '<div class="pn-anno-label">'+esc(s.label)+'</div>'+
+    '<div class="pn-anno-val">'+esc(s.value)+'</div></div>'
+  ).join('');
+
+  var cells=Object.entries(r.specs).map(function(e){
+    var k=e[0],v=e[1];
+    var nil=!v||v==='?'||v==='null'||v==='undefined';
+    var cls=nil?'unknown':HL.has(k)?'hl':'';
+    return '<div class="spec-cell"><div class="spec-field">'+esc(k)+'</div>'+
+           '<div class="spec-value '+cls+'">'+(nil?'—':esc(String(v)))+'</div></div>';
+  }).join('');
+
+  var notes=r.notes?'<div class="notes-box"><div class="nt">// Notes</div><p>'+esc(r.notes)+'</p></div>':'';
+  var warn=r.confidence<75?'<div class="warn-box"><div class="wt">⚠ Partial Decode</div><p>Some positions could not be mapped to known schema values. Verify against the manufacturer\'s datasheet.</p></div>':'';
+
+  document.getElementById('results').innerHTML=
+    '<div class="mfr-banner" style="border-color:'+ac+'40">'+
+      '<div class="mfr-dot" style="background:'+ac+'"></div>'+
+      '<div class="mfr-name" style="color:'+ac+'">'+esc(r.manufacturer)+'</div>'+
+      '<div class="mfr-pn">'+esc(r.pn_display)+'</div>'+
+    '</div>'+warn+
+
+    // ── SALES ONE-LINER ──
+    '<div class="oneliner-wrap">'+
+      '<span class="oneliner-label">Sales copy</span>'+
+      '<span class="oneliner-text" id="liner-text">'+esc(liner)+'</span>'+
+      '<button class="copy-btn" id="copy-btn" onclick="copyLiner()">Copy</button>'+
+    '</div>'+
+
+    '<div class="confidence-wrap">'+
+      '<div class="confidence-bar"><div class="confidence-fill" id="cf" style="background:'+ac+'"></div></div>'+
+      '<div class="confidence-label"><span>Decode confidence</span><span id="cp">0%</span></div>'+
+    '</div>'+
+    '<div class="divider"></div>'+
+    '<div class="section-title">// Segment Breakdown</div>'+
+    '<div class="pn-annotations">'+annos+'</div>'+
+    '<div class="divider"></div>'+
+    '<div class="section-title">// Specifications</div>'+
+    '<div class="spec-grid">'+cells+'</div>'+notes;
+
+  document.getElementById('results').classList.add('visible');
+  requestAnimationFrame(function(){setTimeout(function(){
+    var f=document.getElementById('cf'),p=document.getElementById('cp');
+    if(f) f.style.width=r.confidence+'%';
+    if(p) p.textContent=r.confidence+'%';
+  },80);});
+}
+
+function copyLiner(){
+  var txt=document.getElementById('liner-text');
+  var btn=document.getElementById('copy-btn');
+  if(!txt||!btn) return;
+  navigator.clipboard.writeText(txt.textContent).then(function(){
+    btn.textContent='Copied!';
+    btn.classList.add('copied');
+    setTimeout(function(){btn.textContent='Copy';btn.classList.remove('copied');},2000);
+  }).catch(function(){
+    // fallback
+    var r=document.createRange();
+    r.selectNode(txt);
+    window.getSelection().removeAllRanges();
+    window.getSelection().addRange(r);
+    document.execCommand('copy');
+    window.getSelection().removeAllRanges();
+    btn.textContent='Copied!';
+    btn.classList.add('copied');
+    setTimeout(function(){btn.textContent='Copy';btn.classList.remove('copied');},2000);
+  });
+}
+
+function renderUnknown(pn){
+  document.getElementById('results').innerHTML=
+    '<div class="warn-box"><div class="wt">Unrecognized Part Number</div>'+
+    '<p><strong style="color:var(--text)">'+esc(pn.toUpperCase())+'</strong> — manufacturer prefix not recognized.</p>'+
+    '<p>Supported: Samsung (M3xx), SK Hynix (HMAxx/HMTxx), Micron (MTxx), Kingston (KSM/KVR/KFxx), Crucial/Ballistix (CT/BL).'+
+    '<br>G.Skill (F4-xxx), Corsair (CMxx), and TeamGroup use proprietary schemas not included.</p></div>';
+  document.getElementById('results').classList.add('visible');
+}
+
+function setPN(pn){document.getElementById('pn-input').value=pn;decode();}
+document.getElementById('pn-input').addEventListener('keydown',function(e){if(e.key==='Enter')decode();});
+
+function decode(){
+  var raw=document.getElementById('pn-input').value.trim();
+  if(!raw) return;
+  document.getElementById('results').classList.remove('visible');
+  document.getElementById('results').innerHTML='';
+  document.getElementById('error').classList.remove('visible');
+  try{
+    var r=detectAndDecode(raw);
+    if(r) renderResult(r); else renderUnknown(raw);
+  }catch(e){
+    document.getElementById('error').textContent='Parse error: '+e.message;
+    document.getElementById('error').classList.add('visible');
+    console.error(e);
+  }
+}
+</script>
+</body>
+</html>
