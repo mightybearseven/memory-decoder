@@ -7,15 +7,15 @@
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
 <style>
   :root {
-    --bg:#0a0c0f;--surface:#111419;--surface2:#181c22;--border:#1e2530;--border2:#2a3340;
-    --accent:#00d4aa;--warn:#ff9500;--danger:#ff3b30;--text:#f2f5f9;--text2:#adb8c6;--text3:#6b7d93;
+    --bg:#f0f0eb;--surface:#fafaf7;--surface2:#e8e8e2;--border:#d4d4cc;--border2:#c0c0b8;
+    --accent:#007a6a;--warn:#c47600;--danger:#c0392b;--text:#1a1a18;--text2:#4a4a44;--text3:#888880;
     --mono:'IBM Plex Mono',monospace;--sans:'IBM Plex Sans',sans-serif;
   }
   *{box-sizing:border-box;margin:0;padding:0;}
   body{background:var(--bg);color:var(--text);font-family:var(--sans);min-height:100vh;overflow-x:hidden;}
-  body::before{content:'';position:fixed;inset:0;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,.04) 2px,rgba(0,0,0,.04) 4px);pointer-events:none;z-index:1000;}
+  body::before{display:none;}
   header{border-bottom:1px solid var(--border);padding:20px 32px;display:flex;align-items:center;gap:16px;background:var(--surface);}
-  .logo-mark{width:36px;height:36px;background:var(--accent);display:grid;place-items:center;font-family:var(--mono);font-weight:700;font-size:14px;color:#000;clip-path:polygon(0 0,100% 0,100% 70%,70% 100%,0 100%);flex-shrink:0;}
+  .logo-mark{width:36px;height:36px;background:var(--accent);display:grid;place-items:center;font-family:var(--mono);font-weight:700;font-size:14px;color:#fff;clip-path:polygon(0 0,100% 0,100% 70%,70% 100%,0 100%);flex-shrink:0;}
   header h1{font-family:var(--mono);font-size:18px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;}
   header .sub{font-family:var(--mono);font-size:13px;color:var(--text3);letter-spacing:.08em;text-transform:uppercase;}
   .badge{margin-left:auto;font-family:var(--mono);font-size:12px;color:var(--accent);border:1px solid var(--accent);padding:3px 8px;letter-spacing:.1em;text-transform:uppercase;white-space:nowrap;}
@@ -26,8 +26,8 @@
   .input-prefix{font-family:var(--mono);font-size:14px;color:var(--text3);padding:0 14px;display:flex;align-items:center;border-right:1px solid var(--border2);background:var(--surface2);letter-spacing:.05em;white-space:nowrap;}
   #pn-input{flex:1;background:transparent;border:none;outline:none;padding:14px 16px;font-family:var(--mono);font-size:21px;font-weight:600;color:var(--text);letter-spacing:.08em;text-transform:uppercase;min-width:0;}
   #pn-input::placeholder{color:var(--text3);font-weight:400;text-transform:none;}
-  #decode-btn{background:var(--accent);color:#000;border:none;padding:0 28px;font-family:var(--mono);font-size:14px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;cursor:pointer;transition:background .15s;white-space:nowrap;}
-  #decode-btn:hover{background:#00f0c0;}
+  #decode-btn{background:var(--accent);color:#fff;border:none;padding:0 28px;font-family:var(--mono);font-size:14px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;cursor:pointer;transition:background .15s;white-space:nowrap;}
+  #decode-btn:hover{background:#006055;}
   #decode-btn:active{transform:scale(.98);}
   .examples{margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;}
   .example-chip{font-family:var(--mono);font-size:13px;color:var(--text3);border:1px solid var(--border);padding:5px 11px;cursor:pointer;transition:all .15s;letter-spacing:.05em;}
@@ -854,9 +854,22 @@ function getExcelRow(r){
 
 function buildTSV(r){
   var row=getExcelRow(r);
-  var hdr=EXCEL_COLS.map(function(c){return c.label;}).join('\t');
   var vals=EXCEL_COLS.map(function(c){return String(row[c.key]||'').replace(/\t|\n/g,' ');}).join('\t');
-  return hdr+'\n'+vals;
+  return vals;
+}
+
+function copyCell(val){
+  var clean=val==='—'?'':val;
+  navigator.clipboard.writeText(clean).catch(function(){
+    var ta=document.createElement('textarea');
+    ta.value=clean;ta.style.cssText='position:fixed;opacity:0';
+    document.body.appendChild(ta);ta.select();document.execCommand('copy');document.body.removeChild(ta);
+  });
+  // brief flash feedback on the clicked cell
+  var el=event.currentTarget;
+  var orig=el.style.background;
+  el.style.background='rgba(0,122,106,0.15)';
+  setTimeout(function(){el.style.background=orig;},300);
 }
 
 function copyTable(){
@@ -894,13 +907,15 @@ function renderResult(r){
   var tsv=buildTSV(r);
   var row=getExcelRow(r);
 
-  // Excel table rows
+  // Excel table rows — no header row, each cell clickable to copy
   var thCells=EXCEL_COLS.map(function(c){return '<th>'+esc(c.label)+'</th>';}).join('');
   var tdCells=EXCEL_COLS.map(function(c){
     var v=row[c.key]||'';
     var nil=!v||v==='?';
     var hl=['Capacity','Speed','Rank','ECC','DRAM Standard','Module Type'].indexOf(c.label)>=0;
-    return '<td class="'+(nil?'nil':hl?'hl':'')+'">'+(nil?'—':esc(String(v)))+'</td>';
+    var display=nil?'—':esc(String(v));
+    var copyVal=nil?'—':esc(String(v));
+    return '<td class="'+(nil?'nil':hl?'hl':'')+'" title="Click to copy" onclick="copyCell(\''+copyVal+'\')" style="cursor:pointer">'+display+'</td>';
   }).join('');
 
   var annos=r.segments.filter(s=>s.seg&&s.seg.length).map(s=>
