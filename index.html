@@ -73,6 +73,10 @@
   .spec-value{font-family:var(--mono);font-size:17px;font-weight:600;color:var(--text);line-height:1.3;}
   .spec-value.hl{color:var(--accent);}
   .spec-value.unknown{color:var(--text3);font-style:italic;font-size:14px;font-weight:400;}
+  .rank-badge{display:inline-block;font-size:10px;font-weight:700;letter-spacing:.08em;padding:2px 6px;border-radius:2px;margin-left:7px;vertical-align:middle;text-transform:uppercase;}
+  .rank-badge.encoded{background:rgba(0,122,106,0.15);color:#007a6a;border:1px solid rgba(0,122,106,0.4);}
+  .rank-badge.derived{background:rgba(196,118,0,0.12);color:#c47600;border:1px solid rgba(196,118,0,0.35);}
+  .rank-badge.unknown{background:rgba(136,136,128,0.12);color:#888880;border:1px solid rgba(136,136,128,0.3);}
   .notes-box{border:1px solid var(--border2);background:var(--surface);padding:16px 20px;margin-bottom:20px;}
   .notes-box .nt{font-family:var(--mono);font-size:12px;color:var(--text3);letter-spacing:.12em;text-transform:uppercase;margin-bottom:8px;}
   .notes-box p{font-family:var(--sans);font-size:15px;color:var(--text2);line-height:1.6;}
@@ -171,6 +175,12 @@
           <thead><tr id="bulk-thead"></tr></thead>
           <tbody id="bulk-tbody"></tbody>
         </table>
+      </div>
+      <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:8px;">
+        <span style="font-family:var(--mono);font-size:11px;color:var(--text3)">Rank confidence:</span>
+        <span class="rank-badge encoded" style="font-size:11px">Encoded</span><span style="font-family:var(--mono);font-size:11px;color:var(--text3)"> — directly in PN</span>
+        <span class="rank-badge derived" style="font-size:11px">Est.</span><span style="font-family:var(--mono);font-size:11px;color:var(--text3)"> — calculated, verify before pricing</span>
+        <span class="rank-badge unknown" style="font-size:11px">Verify</span><span style="font-family:var(--mono);font-size:11px;color:var(--text3)"> — not encoded, check label</span>
       </div>
     </div>
   </div>
@@ -430,6 +440,7 @@ var SAMSUNG=(function(){
     return {
       manufacturer:'Samsung',
       confidence:info?(isDDR5?94:96):72,
+      rankConfidence: rankStr ? 'derived' : 'unknown',
       pn_display:pn.toUpperCase(),
       segments:[
         {seg:'M',         label:'Product Type',   value:'Memory Module'},
@@ -552,6 +563,7 @@ var HYNIX=(function(){
     return {
       manufacturer:'SK Hynix',
       confidence:mti?88:70,
+      rankConfidence: rankStr ? 'derived' : 'unknown',
       pn_display:pn.toUpperCase(),
       segments:[
         {seg:'HM',label:'Manufacturer',    value:'SK Hynix DRAM Module'},
@@ -605,11 +617,16 @@ var MICRON=(function(){
   var D2C={'512MB':null,'1GB':'8GB','2GB':'16GB','4GB':'32GB','8GB':'64GB','16GB':'128GB'};
 
   function modType(o){
-    if(/LDZ|LZ/.test(o))         return{type:'LRDIMM',   pins:'288-pin',ecc:true, reg:true, lr:true};
-    if(/PDZ|PZ|RDZ|RZ/.test(o)) return{type:'RDIMM',    pins:'288-pin',ecc:true, reg:true, lr:false};
-    if(/HZ|HG/.test(o))          return{type:'SODIMM',   pins:'260-pin',ecc:false,reg:false,lr:false};
-    if(/AZ/.test(o))              return{type:'SODIMM',   pins:'260-pin',ecc:false,reg:false,lr:false};
-    if(/FZ|UZ|FG/.test(o))      return{type:'ECC UDIMM', pins:'288-pin',ecc:true, reg:false,lr:false};
+    // From Micron official guide:
+    // Z suffix  = x4 org (1Rx4, 2Rx4, 4Rx4, 8Rx4)
+    // DZ suffix = x8 org (2Rx8, 4Rx8, 8Rx8)
+    if(/LDZ|LDS/.test(o))        return{type:'LRDIMM',   pins:'288-pin',ecc:true, reg:true, lr:true,  bitOrg:'x8'};
+    if(/LZ|LS/.test(o))          return{type:'LRDIMM',   pins:'288-pin',ecc:true, reg:true, lr:true,  bitOrg:'x4'};
+    if(/PDZ|PDS|RDZ|RDS/.test(o))return{type:'RDIMM',    pins:'288-pin',ecc:true, reg:true, lr:false, bitOrg:'x8'};
+    if(/PZ|PS|RZ|RS/.test(o))    return{type:'RDIMM',    pins:'288-pin',ecc:true, reg:true, lr:false, bitOrg:'x4'};
+    if(/HZ|HG/.test(o))          return{type:'SODIMM',   pins:'260-pin',ecc:false,reg:false,lr:false, bitOrg:null};
+    if(/AZ|AG/.test(o))          return{type:'UDIMM',    pins:'288-pin',ecc:false,reg:false,lr:false, bitOrg:null};
+    if(/FZ|UZ|FG|EZ/.test(o))   return{type:'ECC UDIMM', pins:'288-pin',ecc:true, reg:false,lr:false,bitOrg:null};
     return null;
   }
 
@@ -633,12 +650,28 @@ var MICRON=(function(){
     var ecc=wr==='72';
     var numDies=parseInt(dr)||null;
 
-    // Rank from die count + package stacking
-    var rankStr=deriveRankMicron(numDies, mi?mi.type:'', pkr);
+    // Derive exact rank using Micron's Z/DZ convention:
+    // chipWidth from bitOrg, busWidth from data width field
+    var rankStr=null;
+    var rankNote=null;
+    if(mi && mi.bitOrg && numDies) {
+      var chipW = mi.bitOrg==='x4' ? 4 : mi.bitOrg==='x8' ? 8 : 16;
+      var busW  = wr==='72' ? 72 : 64;
+      var chipsPerRank = busW / chipW;
+      // Account for stacked packages: SS=DDP(×2), SQ=QDP(×4), SE=Octal(×8)
+      var stackMult = /^S[QE]|^T[QE]|^L[QE]/.test(pkr)?4:/^SS|^TS|^LS/.test(pkr)?2:/^SE|^TE|^LE/.test(pkr)?8:1;
+      var effectiveDiesPerSlot = stackMult;
+      var ranks = Math.round(numDies / (chipsPerRank / effectiveDiesPerSlot));
+      if(ranks>=1 && ranks<=8) rankStr = ranks+'Rx'+chipW;
+    } else if(numDies) {
+      // fallback: can't determine bit org
+      rankNote = 'Bit organization not determinable from this PN — check module label for rank.';
+    }
 
     return {
       manufacturer:'Micron Technology',
       confidence:mi?85:72,
+      rankConfidence: rankStr ? (mi&&mi.bitOrg ? 'encoded' : 'derived') : 'unknown',
       pn_display:pn.toUpperCase(),
       segments:[
         {seg:'MT',       label:'Manufacturer',   value:'Micron Technology'},
@@ -660,6 +693,7 @@ var MICRON=(function(){
         'Capacity':      cap||'?',
         'Speed':         spd||(suf||'?'),
         'Rank':          rankStr||'?',
+        'Bit Organization': mi&&mi.bitOrg ? mi.bitOrg : '?',
         'ECC':           mi?(mi.ecc?'Yes':'No'):(ecc?'Yes':'No'),
         'Registered':    mi?(mi.reg?'Yes':'No'):'?',
         'Load Reduced':  mi?(mi.lr?'Yes':'No'):'No',
@@ -668,7 +702,7 @@ var MICRON=(function(){
         'Data Width':    wr==='72'?'x72 (ECC)':wr==='64'?'x64 (non-ECC)':wr,
         'Voltage':       VOLT[vc]||'?',
       },
-      notes:rankStr&&rankStr.includes('or')?'Rank is ambiguous from the PN alone — bit organization not fully encoded in Micron module numbers. Verify rank from label or SPD.':null,
+      notes: rankNote||null,
     };
   }
   return{decode};
@@ -703,7 +737,7 @@ var KINGSTON=(function(){
     var mt=KST[tc]||tc,ec=['R','L','E'].includes(tc),rg=['R','L'].includes(tc);
     var rankStr=rankFromKSM(rk,wc);
     return {
-      manufacturer:'Kingston (Server Premier)',confidence:93,pn_display:pn.toUpperCase(),
+      manufacturer:'Kingston (Server Premier)',confidence:93,rankConfidence:'encoded',pn_display:pn.toUpperCase(),
       segments:[
         {seg:'KSM',  label:'Product Line', value:'Kingston Server Premier'},
         {seg:sr,     label:'Speed',        value:'DDR4-'+sr+'00'},
@@ -742,7 +776,7 @@ var KINGSTON=(function(){
     var sn=parseInt(sr)*100,gen=sn>=2133?'DDR4':'DDR3';
     var rankStr=rankFromKSM(rk,wc);
     return {
-      manufacturer:'Kingston (ValueRAM)',confidence:87,pn_display:pn.toUpperCase(),
+      manufacturer:'Kingston (ValueRAM)',confidence:87,rankConfidence:'encoded',pn_display:pn.toUpperCase(),
       segments:[
         {seg:'KVR',  label:'Product Line',value:'Kingston ValueRAM'},
         {seg:sr,     label:'Speed',       value:gen+'-'+sn},
@@ -774,7 +808,7 @@ var KINGSTON=(function(){
     var si=pn.indexOf('/'),cap=si>=0?(pn.substring(si+1).match(/\d+/)||['?'])[0]:'?';
     var km=pn.toUpperCase().match(/K(\d+)$/),kit=km?km[1]+'-stick kit':null;
     return {
-      manufacturer:'Kingston (FURY)',confidence:80,pn_display:pn.toUpperCase(),
+      manufacturer:'Kingston (FURY)',confidence:80,rankConfidence:'unknown',pn_display:pn.toUpperCase(),
       segments:[
         {seg:'KF',    label:'Product Line', value:'Kingston FURY'},
         {seg:sr,      label:'Speed',        value:gen+'-'+sn},
@@ -822,6 +856,7 @@ var CRUCIAL=(function(){
     return {
       manufacturer:pfx==='BL'?'Crucial (Ballistix)':'Crucial',
       confidence:gen?72:50,
+      rankConfidence:'unknown',
       pn_display:pn.toUpperCase(),
       segments:[
         {seg:pfx,    label:'Brand',    value:pfx==='BL'?'Crucial Ballistix':'Crucial'},
@@ -985,15 +1020,24 @@ function renderResult(r){
     '<div class="pn-anno-val">'+esc(s.value)+'</div></div>'
   ).join('');
 
+  var rc=r.rankConfidence||'unknown';
+  var badgeLabel=rc==='encoded'?'Encoded':rc==='derived'?'Estimated':'Verify';
   var cells=Object.entries(r.specs).map(function(e){
     var k=e[0],v=e[1];
     var nil=!v||v==='?'||v==='null'||v==='undefined';
     var cls=nil?'unknown':HL.has(k)?'hl':'';
+    var badge=(k==='Rank'&&!nil)?'<span class="rank-badge '+rc+'">'+badgeLabel+'</span>':'';
     return '<div class="spec-cell"><div class="spec-field">'+esc(k)+'</div>'+
-           '<div class="spec-value '+cls+'">'+(nil?'—':esc(String(v)))+'</div></div>';
+           '<div class="spec-value '+cls+'">'+(nil?'—':esc(String(v)))+badge+'</div></div>';
   }).join('');
 
   var notes=r.notes?'<div class="notes-box"><div class="nt">// Notes</div><p>'+esc(r.notes)+'</p></div>':'';
+  var rankLegend='<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:20px;align-items:center;">'+
+    '<span style="font-family:var(--mono);font-size:11px;color:var(--text3)">Rank badge:</span>'+
+    '<span class="rank-badge encoded">Encoded</span><span style="font-family:var(--mono);font-size:11px;color:var(--text3)">directly in PN</span>'+
+    '<span class="rank-badge derived">Est.</span><span style="font-family:var(--mono);font-size:11px;color:var(--text3)">calculated — verify before pricing</span>'+
+    '<span class="rank-badge unknown">Verify</span><span style="font-family:var(--mono);font-size:11px;color:var(--text3)">not encoded — check label</span>'+
+  '</div>';
   var warn=r.confidence<75?'<div class="warn-box"><div class="wt">⚠ Partial Decode</div><p>Some positions could not be mapped to known schema values. Verify against the manufacturer\'s datasheet.</p></div>':'';
 
   document.getElementById('results').innerHTML=
@@ -1031,7 +1075,7 @@ function renderResult(r){
     '<div class="pn-annotations">'+annos+'</div>'+
     '<div class="divider"></div>'+
     '<div class="section-title">// Specifications</div>'+
-    '<div class="spec-grid">'+cells+'</div>'+notes;
+    '<div class="spec-grid">'+cells+'</div>'+rankLegend+notes;
 
   document.getElementById('results').classList.add('visible');
   requestAnimationFrame(function(){setTimeout(function(){
@@ -1097,6 +1141,7 @@ function decodeBulk(){
       if(r){
         var row=getExcelRow(r);
         row._ok=true;
+        row._rankConfidence=r.rankConfidence||'unknown';
         bulkRows.push(row);
       } else {
         bulkRows.push({pn:pn.toUpperCase(),_ok:false,_err:'Unrecognized'});
@@ -1112,7 +1157,9 @@ function decodeBulk(){
 
   // Build data rows
   var tbody=document.getElementById('bulk-tbody');
-  tbody.innerHTML=bulkRows.map(function(row,ri){
+  tbody.innerHTML=bulkRows.map(function(row){
+    var rc=row._rankConfidence||'unknown';
+    var badgeLbl=rc==='encoded'?'Encoded':rc==='derived'?'Est.':'Verify';
     return '<tr>'+EXCEL_COLS.map(function(c){
       if(!row._ok){
         return c.key==='pn'
@@ -1124,7 +1171,8 @@ function decodeBulk(){
       var hl=['Capacity','Speed','Rank','ECC','DRAM Standard','Module Type'].indexOf(c.label)>=0;
       var display=nil?'—':esc(String(v));
       var copyVal=nil?'':esc(String(v));
-      return '<td class="'+(nil?'':hl?'hl':'')+'" title="Click to copy" onclick="copyCellVal(\''+copyVal+'\')">'+display+'</td>';
+      var badge=(c.label==='Rank'&&!nil)?'<span class="rank-badge '+rc+'">'+badgeLbl+'</span>':'';
+      return '<td class="'+(nil?'':hl?'hl':'')+'" title="Click to copy" onclick="copyCellVal(\''+copyVal+'\')">'+display+badge+'</td>';
     }).join('')+'</tr>';
   }).join('');
 
