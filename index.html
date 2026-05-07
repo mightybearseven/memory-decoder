@@ -403,26 +403,27 @@ var SAMSUNG=(function(){
   // (older parts where rank isn't cleanly derivable from die density).
   // Format: key = 4-char density code,  value = {cap:'GB', rank:'NRxW', width:'x4|x8|x16'}
   var DDR3_DENSITY={
-    // 4GB modules
-    '5170':{cap:'4GB',rank:'2Rx4',width:'x4'},  // 256Mx72  (2Rx4)
-    '5173':{cap:'4GB',rank:'1Rx8',width:'x8'},  // 512Mx72  (1Rx8) — Q-die
-    '5270':{cap:'4GB',rank:'1Rx4',width:'x4'},  // 512Mx72  (1Rx4)
-    '5273':{cap:'4GB',rank:'1Rx8',width:'x8'},  // 512Mx72  (1Rx8)
-    // 8GB modules
-    '1G70':{cap:'8GB',rank:'2Rx4',width:'x4'},  // 1Gx72   (2Rx4)
-    '1G73':{cap:'8GB',rank:'2Rx8',width:'x8'},  // 1Gx72   (2Rx8)
-    '5172':{cap:'8GB',rank:'2Rx4',width:'x4'},  // alt 8GB 2Rx4
-    // 16GB modules
-    '2G70':{cap:'16GB',rank:'2Rx4',width:'x4'}, // 2Gx72  (2Rx4)
-    '2G73':{cap:'16GB',rank:'2Rx8',width:'x8'}, // 2Gx72  (2Rx8)
-    // 32GB modules
-    '4G70':{cap:'32GB',rank:'4Rx4',width:'x4'}, // 4Gx72  (4Rx4 LRDIMM/RDIMM)
-    '4G72':{cap:'32GB',rank:'4Rx4',width:'x4'},
+    // ONLY unambiguous depth+width codes. Codes like 1G70 / 2G70 are
+    // ambiguous (1Rx4 with 4Gb dies OR 2Rx4 with 2Gb dies depending on
+    // die generation), so they're handled by the die-rev-based math fallback
+    // in the rank derivation block below.
+    // 4GB modules — early DDR3 with small dies, rank pinned by depth digit
+    '5170':{cap:'4GB',rank:'2Rx4',width:'x4'},  // 256Mx72 (2Rx4 with 1Gb dies)
+    '5173':{cap:'4GB',rank:'1Rx8',width:'x8'},  // 512Mx72 (1Rx8) — Q-die
+    '5270':{cap:'4GB',rank:'1Rx4',width:'x4'},  // 512Mx72 (1Rx4)
+    '5273':{cap:'4GB',rank:'1Rx8',width:'x8'},  // 512Mx72 (1Rx8)
     // 2GB modules
     '5673':{cap:'2GB',rank:'1Rx8',width:'x8'}, // 256Mx72 (1Rx8)
     '5670':{cap:'2GB',rank:'1Rx4',width:'x4'},
     '5770':{cap:'2GB',rank:'2Rx8',width:'x8'},
-    // Non-ECC variants (last digit indicates x8 etc., field still reads same)
+    // 8GB special width=x8 cases (rank determined by die)
+    '1G73':{cap:'8GB',rank:'2Rx8',width:'x8'},  // 1Gx72 x8 (2Rx8)
+    // 16GB special width=x8 cases
+    '2G73':{cap:'16GB',rank:'2Rx8',width:'x8'}, // 2Gx72 x8 (2Rx8)
+    // 32GB modules — 4-rank pin via depth code
+    '4G70':{cap:'32GB',rank:'4Rx4',width:'x4'},
+    '4G72':{cap:'32GB',rank:'4Rx4',width:'x4'},
+    // Non-ECC variants
     '1G63':{cap:'8GB',rank:'2Rx8',width:'x8'},
     '5163':{cap:'4GB',rank:'2Rx8',width:'x8'},
   };
@@ -508,14 +509,39 @@ var SAMSUNG=(function(){
     if(isDDR5)      dieGB = 2;            // 16Gb default; 24Gb retried in rank loop
     else if(isDDR4) dieGB = dieGB_DDR4(dr, crc);
     else if(isDDR3) {
-      // Samsung DDR3 die generations:
-      //   A=512Mb, B=1Gb, C=2Gb, D=4Gb, E=4Gb (refresh), F=4Gb (refresh)
-      //   K-die = 8Gb (later)
-      dieGB = (crc==='K') ? 1 :
-              (crc==='D'||crc==='E'||crc==='F') ? 0.5 :
-              (crc==='C') ? 0.25 :
-              (crc==='B') ? 0.125 :
-              0.5;
+      // Samsung DDR3 die generations (corrected per actual product lineup):
+      //   A-die: 1Gb (early DDR3 ~2010, e.g. M393B5170AH0)
+      //   E-die: 2Gb (DDR3-1333 era)
+      //   F-die: 2Gb (DDR3-1333/1600 era)
+      //   B-die: 4Gb (DDR3-1600 mature, e.g. M393B1G70BH0-CK0 = 8GB 1Rx4)
+      //   C-die: 4Gb (refresh of B-die) — but used with K-depth for 2Gb effective
+      //   D-die: 4Gb (refresh)
+      //   K-die: 8Gb (latest DDR3)
+      // Depth-code suffix letter (G vs K) refines die density similarly to DDR4:
+      //   *G = G-tier (larger dies, fewer ranks): 1G70=4Gb, 2G70=4Gb
+      //   *K = K-tier (smaller dies, more ranks): 1K70=2Gb, 2K70=2Gb
+      // The die-density fallback loop will try alternates if primary doesn't fit.
+      var drU = (dr||'').toUpperCase();
+      if(drU.endsWith('K')){
+        // K-tier: smaller dies than the component-rev letter would suggest
+        dieGB = (crc==='K') ? 0.5 :
+                (crc==='B'||crc==='C'||crc==='D') ? 0.25 :
+                (crc==='E'||crc==='F') ? 0.125 :
+                0.25;
+      } else if(drU.endsWith('G')){
+        // G-tier: larger dies (single-rank pattern)
+        dieGB = (crc==='K') ? 1 :
+                (crc==='B'||crc==='C'||crc==='D') ? 0.5 :
+                (crc==='E'||crc==='F') ? 0.25 :
+                0.5;
+      } else {
+        // Older 5xxx-style depth codes; fall back to component-rev letter
+        dieGB = (crc==='K') ? 1 :
+                (crc==='B'||crc==='C'||crc==='D') ? 0.5 :
+                (crc==='E'||crc==='F') ? 0.25 :
+                (crc==='A') ? 0.125 :
+                0.5;
+      }
     }
 
     // ─── Rank derivation ───
@@ -813,20 +839,21 @@ var HYNIX=(function(){
       // resolve cleanly. Hynix reuses density letters across capacity tiers
       // (e.g. 'A' = 16Gb in newer parts, but acts as 8Gb in some LRDIMMs that
       // use DDP packaging at higher rank counts).
-      // For LRDIMMs with M-marker (DDP), prefer the smaller die that yields
-      // higher rank counts — that's the typical configuration.
-      var isStackedLR = (mtc==='L' && vr[1]==='M');
-      // For stacked LRDIMMs (DDP), Hynix's letter-density is unreliable.
-      // Try common LRDIMM die sizes in order (8Gb, 16Gb, 4Gb), pick the one
-      // that yields rank=4 (the standard for these high-capacity LRDIMM PNs).
-      var dieOpts = isStackedLR
-        ? [1, 2, 0.5]
+      // M-marker DDP detection: vr[1]='M' or 'H' indicates a stacked dual-die package.
+      // - 'M' = standard multi-die stack (HMAA8GL7AMR4N, HMT41GV7BMR8C)
+      // - 'H' = heat-spreader stacked (HMT41GV7BHR4C-G7)
+      // Applies to all module types — LRDIMMs, RDIMMs, VLP variants.
+      var isStackedDDP = (vr[1]==='M' || vr[1]==='H');
+      // For stacked DDP modules, Hynix's letter-density is the per-package density,
+      // not the per-die density. Prefer smaller die sizes that yield higher rank counts.
+      var dieOpts = isStackedDDP
+        ? [primaryDie/2, 0.125, 0.25, 0.5, 1, 2, primaryDie]
         : [primaryDie, 0.5, 1, 2, 4];
-      // First pass: prefer rank=4 for stacked LRDIMMs
-      if(isStackedLR){
+      // First pass for stacked DDP: prefer rank counts ≥ 4 (the typical config)
+      if(isStackedDDP){
         for(var i=0;i<dieOpts.length;i++){
           var got = deriveRankCommon(totalGB, dieOpts[i], chipW, 1);
-          if(got && parseInt(got)===4){ rankStr = got; break; }
+          if(got && parseInt(got)>=4){ rankStr = got; break; }
         }
       }
       // Second pass: any sensible rank result (1-8)
