@@ -663,6 +663,31 @@ var HYNIX=(function(){
     // DDR4 — same scheme but maps follow DDR4 die sizes (4Gb/8Gb/16Gb/32Gb)
     'A1G':'16GB', 'A2G':'32GB','A4G':'64GB',
   };
+  // Newer HMAG* family — combined density+width code at positions 4-5
+  // determines capacity and bit-org directly. Verified against Intel's
+  // DDR4 RDIMM 3200 validation document.
+  var HMAG_CFG={
+    // [pos 4-5] → {cap, rank, width}
+    // density tier 8 = 32GB family, 7 = 16GB, 9 = 64GB
+    '74':{cap:'16GB',rank:'1Rx4',width:'x4'},
+    '78':{cap:'16GB',rank:'1Rx8',width:'x8'},
+    '84':{cap:'32GB',rank:'2Rx4',width:'x4'},
+    '88':{cap:'32GB',rank:'2Rx8',width:'x8'},
+    '94':{cap:'64GB',rank:'2Rx4',width:'x4'},
+    '98':{cap:'64GB',rank:'2Rx8',width:'x8'},
+    'A4':{cap:'128GB',rank:'4Rx4',width:'x4'},
+    'A8':{cap:'128GB',rank:'4Rx8',width:'x8'},
+  };
+  // Speed codes embedded in PN tail (no dash separator).
+  // First 3 digits = speed code: 199/086/084 = 3200 CL22 (different RCD vendors)
+  var HMAG_SPD={
+    '199':'3200 CL22','086':'3200 CL22','084':'3200 CL22',
+    '174':'3200 CL26','144':'2933 CL21','143':'2666 CL19','108':'2666 CL19',
+  };
+  var HMAG_RCD={
+    '199':'Rambus','086':'IDT/Renesas','084':'Montage','108':'Montage','144':'Rambus','174':'IDT/Renesas',
+  };
+
   var D2C={'256MB':null,'512MB':null,'1GB':'8GB','2GB':'16GB','4GB':'32GB','8GB':'64GB','16GB':'128GB'};
 
   function decode(pn){
@@ -671,6 +696,68 @@ var HYNIX=(function(){
     var gc=u[2],isDDR4=gc==='A',isDDR3=gc==='T';
     if(!isDDR4&&!isDDR3) return null;
     var parts=pn.split('-'),base=parts[0].toUpperCase(),suf=(parts[1]||'').toUpperCase();
+
+    // Detect newer HMAG* (G-die family, no dash speed suffix)
+    var isHMAG = base.startsWith('HMAG');
+    if(isHMAG){
+      var dwCode = base.substring(4,6);                     // e.g. '84' / '78' / '74'
+      var cfg    = HMAG_CFG[dwCode];
+      var typeCh = base[6] || '';                            // 'E' = RDIMM
+      var threeDS= base[7] || '';                            // '3' would mean 3DS
+      var pmicCD = base[9] || '';                            // package code variant
+      var rcdCode= base.substring(11,14);                    // '199'/'086'/'084'/etc
+      var tempCh = base[14] || '';                           // 'N' = commercial
+      var speedTxt = HMAG_SPD[rcdCode] || rcdCode;
+      var rcdVendor = HMAG_RCD[rcdCode] || 'Unknown';
+      var bo  = cfg ? cfg.width : null;
+      var rankStr = cfg ? cfg.rank : null;
+      var cap = cfg ? cfg.cap : null;
+      var den = '16Gb';   // HMAG family uses 16Gb dies for these capacities
+      // Adjust den per capacity: 64GB tier = 16Gb dies; 32GB tier = 16Gb; 16GB tier = 8Gb
+      if(cfg){
+        if(cfg.cap==='16GB') den='8Gb';
+        else if(cfg.cap==='32GB' || cfg.cap==='64GB') den='16Gb';
+        else if(cfg.cap==='128GB') den='16Gb';
+      }
+      var modType = (typeCh==='E') ? {type:'RDIMM',pins:'288-pin',ecc:true,reg:true,lr:false}
+                  : (typeCh==='L') ? {type:'LRDIMM',pins:'288-pin',ecc:true,reg:true,lr:true}
+                  : {type:'RDIMM',pins:'288-pin',ecc:true,reg:true,lr:false};
+      var temp = (tempCh==='N')?'Commercial':(tempCh==='E')?'Extended':(tempCh==='I')?'Industrial':tempCh;
+
+      return {
+        manufacturer:'SK Hynix',
+        confidence:90,
+        rankConfidence: rankStr ? 'encoded' : 'unknown',
+        pn_display: pn.toUpperCase(),
+        segments:[
+          {seg:'HMA',     label:'Manufacturer',   value:'SK Hynix'},
+          {seg:'G',       label:'Family',         value:'G-die DDR4 (newer scheme)'},
+          {seg:dwCode,    label:'Density+Width',  value:cap+' '+(rankStr||'?')},
+          {seg:typeCh,    label:'Module Type',    value:modType.type},
+          {seg:rcdCode,   label:'Speed/RCD Code', value:speedTxt+' ('+rcdVendor+' RCD)'},
+          {seg:tempCh,    label:'Temperature',    value:temp},
+        ].filter(function(s){return s.seg;}),
+        specs:{
+          'Manufacturer':     'SK Hynix',
+          'DRAM Standard':    'DDR4',
+          'Module Type':      modType.type,
+          'Form Factor':      'DIMM',
+          'Pin Count':        modType.pins,
+          'Capacity':         cap || '?',
+          'Speed':            speedTxt,
+          'Rank':             rankStr || '?',
+          'ECC':              'Yes',
+          'Registered':       'Yes',
+          'Load Reduced':     modType.lr ? 'Yes' : 'No',
+          'Die Density':      den,
+          'Bit Organization': bo || '?',
+          'RCD Vendor':       rcdVendor,
+          'Temperature':      temp,
+          'Voltage':          '1.2V',
+        },
+      };
+    }
+
     var dc=base[3],dr=base.substring(4,6),mtc=base[6],dwc=base[7],vr=base.substring(8);
     var den=(isDDR4?DEN4:DEN3)[dc]||dc;
     var dep=DEP[dr]||dr;
