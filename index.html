@@ -1098,7 +1098,7 @@ var MICRON=(function(){
     if(/LZ|LS/.test(o))            return{type:'LRDIMM',    pins:'288-pin',ecc:true, reg:true, lr:true,  bitOrg:null}; // derive
     if(/PDZ|PDS|RDZ|RDS/.test(o)) return{type:'RDIMM',     pins:'288-pin',ecc:true, reg:true, lr:false, bitOrg:'x8'};
     if(/PZ|PS|RZ|RS/.test(o))     return{type:'RDIMM',     pins:'288-pin',ecc:true, reg:true, lr:false, bitOrg:null}; // derive (could be x4 OR x8 depending on die count)
-    if(/^X.*Z/.test(o))            return{type:'NVDIMM-N',  pins:'288-pin',ecc:true, reg:true, lr:false, bitOrg:'x4'}; // NVDIMM-N (registered + non-volatile, standard x4)
+    if(/F1Z$|F1S$/.test(o))        return{type:'NVDIMM-N',  pins:'288-pin',ecc:true, reg:true, lr:false, bitOrg:'x4'}; // *F1Z = NVDIMM-N (battery-backed registered DDR4); covers both PF1Z and XF1Z variants
     if(/HZ|HG/.test(o))            return{type:'SODIMM',    pins:'260-pin',ecc:false,reg:false,lr:false, bitOrg:null};
     if(/AZ|AG/.test(o))            return{type:'UDIMM',     pins:'288-pin',ecc:false,reg:false,lr:false, bitOrg:null};
     if(/FZ|UZ|FG|EZ/.test(o))     return{type:'ECC UDIMM', pins:'288-pin',ecc:true, reg:false,lr:false, bitOrg:null};
