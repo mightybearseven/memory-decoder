@@ -320,7 +320,12 @@
 function dieGB_DDR4(depthCode, crc) {
   var dr = (depthCode||'').toUpperCase();
   var c  = (crc||'').toUpperCase();
+  // Depth-code suffix letter is the strongest die-density signal:
+  //   *K = K-die family = 8Gb dies (1GB) — older generation, used for high-rank parts
+  //   *G = G-die family = 16Gb dies (2GB) — newer generation
   if (dr.endsWith('K')) return 1;
+  if (dr.endsWith('G')) return 2;
+  // Fall back to component-rev letter (less reliable, reused across generations)
   if (c === 'M') return 2;
   if (c === 'C' || c === 'D') return 1;
   if (c === 'E' || c === 'F' || c === 'G' || c === 'H') return 2;
@@ -540,11 +545,10 @@ var SAMSUNG=(function(){
       var capGB4 = parseInt(cap);
       var chipW4 = BOG[boc]==='x4'?4 : BOG[boc]==='x8'?8 : BOG[boc]==='x16'?16 : 8;
       // No stack multiplier — 3DS packaging (pkc='2'/'4') doesn't change per-rank
-      // capacity; it just stacks dies physically. The schema's depth+die-rev fields
-      // already encode the correct die density for both 3DS and non-3DS variants.
+      // capacity; it just stacks dies physically. The schema's depth-code suffix
+      // letter (K vs G) encodes the correct die density for both 3DS and non-3DS
+      // variants and Samsung's various die generations.
       // Try primary die density first; fall back to alternates if rank math fails.
-      // Samsung reuses die-rev letters across generations (e.g. E-die was 8Gb in
-      // older 16GB parts, 16Gb in newer 32GB parts).
       var dieOpts4 = [dieGB, 0.5, 1, 2, 4];
       for(var i=0;i<dieOpts4.length;i++){
         var got = deriveRankCommon(capGB4, dieOpts4[i], chipW4, 1);
