@@ -793,16 +793,41 @@ var HYNIX=(function(){
     var rankStr=null;
     if(cap&&den&&boch){
       var totalGB=parseInt(cap);
-      var dieGB=den==='8Gb'?1:
-                den==='16Gb'?2:
-                den==='4Gb'?0.5:
-                den==='32Gb'?4:
-                den==='2Gb'?0.25:
-                den==='1Gb'?0.125:
-                0.5;
+      var primaryDie = den==='8Gb'?1:
+                       den==='16Gb'?2:
+                       den==='4Gb'?0.5:
+                       den==='32Gb'?4:
+                       den==='2Gb'?0.25:
+                       den==='1Gb'?0.125:
+                       0.5;
       var chipW=boch==='4'?4:boch==='8'?8:boch==='16'?16:8;
-      var isDDP=/DDP|SS/.test(vr);
-      rankStr = deriveRankCommon(totalGB, dieGB, chipW, isDDP?2:1);
+      // Try primary die density first; fall back to alternates if rank doesn't
+      // resolve cleanly. Hynix reuses density letters across capacity tiers
+      // (e.g. 'A' = 16Gb in newer parts, but acts as 8Gb in some LRDIMMs that
+      // use DDP packaging at higher rank counts).
+      // For LRDIMMs with M-marker (DDP), prefer the smaller die that yields
+      // higher rank counts — that's the typical configuration.
+      var isStackedLR = (mtc==='L' && vr[1]==='M');
+      // For stacked LRDIMMs (DDP), Hynix's letter-density is unreliable.
+      // Try common LRDIMM die sizes in order (8Gb, 16Gb, 4Gb), pick the one
+      // that yields rank=4 (the standard for these high-capacity LRDIMM PNs).
+      var dieOpts = isStackedLR
+        ? [1, 2, 0.5]
+        : [primaryDie, 0.5, 1, 2, 4];
+      // First pass: prefer rank=4 for stacked LRDIMMs
+      if(isStackedLR){
+        for(var i=0;i<dieOpts.length;i++){
+          var got = deriveRankCommon(totalGB, dieOpts[i], chipW, 1);
+          if(got && parseInt(got)===4){ rankStr = got; break; }
+        }
+      }
+      // Second pass: any sensible rank result (1-8)
+      if(!rankStr){
+        for(var j=0;j<dieOpts.length;j++){
+          var got2 = deriveRankCommon(totalGB, dieOpts[j], chipW, 1);
+          if(got2){ rankStr = got2; break; }
+        }
+      }
     }
 
     return {
