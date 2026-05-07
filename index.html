@@ -1763,13 +1763,29 @@ var EXCEL_COLS=[
   {key:'Capacity',     label:'Capacity'},
   {key:'Speed',        label:'Speed'},
   {key:'Rank',         label:'Rank'},
+  {key:'rankStrength', label:'Rank Strength'},
   {key:'ECC',          label:'ECC'},
 ];
+
+// rankConfidence → user-facing label
+var RANK_STRENGTH_LABEL={
+  'encoded': 'Encoded',
+  'derived': 'Est.',
+  'unknown': 'Verify',
+};
 
 function getExcelRow(r){
   var row={pn:r.pn_display};
   EXCEL_COLS.forEach(function(c){
-    if(c.key!=='pn') row[c.key]=r.specs[c.label]||r.specs[c.key]||'';
+    if(c.key==='pn') return;
+    if(c.key==='rankStrength'){
+      // pull from r.rankConfidence; if rank is missing entirely, mark Verify
+      var rk = r.specs && (r.specs.Rank || r.specs.rank);
+      if(!rk || rk==='?' || rk===''){ row[c.key]='Verify'; }
+      else { row[c.key] = RANK_STRENGTH_LABEL[r.rankConfidence] || 'Verify'; }
+      return;
+    }
+    row[c.key]=r.specs[c.label]||r.specs[c.key]||'';
   });
   return row;
 }
@@ -1834,6 +1850,11 @@ function renderResult(r){
     var v=row[c.key]||'';
     var nil=!v||v==='?';
     var hl=['Capacity','Speed','Rank','ECC','DRAM Standard','Module Type'].indexOf(c.label)>=0;
+    if(c.key==='rankStrength'){
+      var rsClass = v==='Encoded'?'encoded':v==='Est.'?'derived':'unknown';
+      var rsDisplay = nil ? '—' : '<span class="rank-badge '+rsClass+'">'+esc(String(v))+'</span>';
+      return '<td title="Click to copy" onclick="copyCell(\''+esc(String(v||''))+'\')" style="cursor:pointer">'+rsDisplay+'</td>';
+    }
     var display=nil?'—':esc(String(v));
     var copyVal=nil?'—':esc(String(v));
     return '<td class="'+(nil?'nil':hl?'hl':'')+'" title="Click to copy" onclick="copyCell(\''+copyVal+'\')" style="cursor:pointer">'+display+'</td>';
@@ -2032,7 +2053,6 @@ function decodeBulk(){
   var tbody=document.getElementById('bulk-tbody');
   tbody.innerHTML=bulkRows.map(function(row){
     var rc=row._rankConfidence||'unknown';
-    var badgeLbl=rc==='encoded'?'Encoded':rc==='derived'?'Est.':'Verify';
     return '<tr>'+EXCEL_COLS.map(function(c){
       if(!row._ok){
         return c.key==='pn'
@@ -2042,10 +2062,15 @@ function decodeBulk(){
       var v=row[c.key]||'';
       var nil=!v||v==='?';
       var hl=['Capacity','Speed','Rank','ECC','DRAM Standard','Module Type'].indexOf(c.label)>=0;
+      // Rank Strength: render as colored badge; copy plain label on click
+      if(c.key==='rankStrength'){
+        var rsClass = v==='Encoded'?'encoded':v==='Est.'?'derived':'unknown';
+        var rsDisplay = nil ? '—' : '<span class="rank-badge '+rsClass+'">'+esc(String(v))+'</span>';
+        return '<td title="Click to copy" onclick="copyCellVal(\''+esc(String(v||''))+'\')">'+rsDisplay+'</td>';
+      }
       var display=nil?'—':esc(String(v));
       var copyVal=nil?'':esc(String(v));
-      var badge=(c.label==='Rank'&&!nil)?'<span class="rank-badge '+rc+'">'+badgeLbl+'</span>':'';
-      return '<td class="'+(nil?'':hl?'hl':'')+'" title="Click to copy" onclick="copyCellVal(\''+copyVal+'\')">'+display+badge+'</td>';
+      return '<td class="'+(nil?'':hl?'hl':'')+'" title="Click to copy" onclick="copyCellVal(\''+copyVal+'\')">'+display+'</td>';
     }).join('')+'</tr>';
   }).join('');
 
