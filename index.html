@@ -539,14 +539,16 @@ var SAMSUNG=(function(){
     } else if(isDDR4 && cap && boc) {
       var capGB4 = parseInt(cap);
       var chipW4 = BOG[boc]==='x4'?4 : BOG[boc]==='x8'?8 : BOG[boc]==='x16'?16 : 8;
-      var stk = pkc==='2' ? 2 : pkc==='4' ? 4 : 1;
+      // No stack multiplier — 3DS packaging (pkc='2'/'4') doesn't change per-rank
+      // capacity; it just stacks dies physically. The schema's depth+die-rev fields
+      // already encode the correct die density for both 3DS and non-3DS variants.
       // Try primary die density first; fall back to alternates if rank math fails.
       // Samsung reuses die-rev letters across generations (e.g. E-die was 8Gb in
-      // older parts, 16Gb in newer).
+      // older 16GB parts, 16Gb in newer 32GB parts).
       var dieOpts4 = [dieGB, 0.5, 1, 2, 4];
       for(var i=0;i<dieOpts4.length;i++){
-        var got = deriveRankCommon(capGB4, dieOpts4[i], chipW4, stk);
-        if(got){ rankStr = got; rankConf = (i===0?'derived':'derived'); dieGB = dieOpts4[i]; break; }
+        var got = deriveRankCommon(capGB4, dieOpts4[i], chipW4, 1);
+        if(got){ rankStr = got; rankConf = 'derived'; dieGB = dieOpts4[i]; break; }
       }
     } else if(isDDR3 && cap && boc && !rankStr) {
       // Samsung DDR3 server PNs share the DDR4 positional layout — just different die
