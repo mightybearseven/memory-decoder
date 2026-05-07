@@ -698,7 +698,8 @@ var HYNIX=(function(){
     // DDR3 — 1Gb die family
     '125':'2GB',  '151':'4GB',
     // DDR3 — 2Gb die family (3xx prefix)
-    '325':'4GB',  '351':'8GB',  '31G':'8GB',  '32G':'16GB',
+    // NOTE: '351' removed — ambiguous (4GB on x4 1Rx4 vs 8GB on x8 2Rx8). Math fallback handles it.
+    '325':'4GB',  '31G':'8GB',  '32G':'16GB',
     // DDR3 — 4Gb die family (4xx prefix)
     '425':'8GB',  '451':'4GB',  '41G':'8GB',  '42G':'16GB', '44G':'32GB',
     // DDR3 — 8Gb die family
@@ -815,11 +816,30 @@ var HYNIX=(function(){
     var cap = MOD_CAP[dc+dr] || D2C[dep] || null;
 
     if(!cap && dep && bo) {
-      var depMB={'256MB':256,'512MB':512,'1GB':1024,'2GB':2048}[dep];
-      if(depMB) {
-        var chipBitsH=boch==='4'?4:boch==='8'?8:boch==='16'?16:8;
-        var totalMB=depMB*(64/chipBitsH);
-        cap=totalMB>=1024?(totalMB/1024)+'GB':totalMB+'MB';
+      // Compute capacity-per-rank from depth field, then total = per-rank × ranks.
+      // depth × 8 bytes (64-bit data bus) = bytes per rank.
+      // Total module cap = per-rank × number-of-ranks. We don't know rank yet, so
+      // try common rank counts (1, 2, 4) and pick the one consistent with die density.
+      var depMB2={'256MB':256,'512MB':512,'1GB':1024,'2GB':2048,'4GB':4096}[dep];
+      if(depMB2) {
+        var perRankMB = depMB2 * 8;     // 64-bit data bus → 8 bytes per word
+        // Compare to die density math: per-rank cap = chipsPerRank × dieGB
+        // For x4 ECC: 16 data chips per rank. For x8: 8. For x16: 4.
+        var chipsPerRankGuess = boch==='4'?16 : boch==='8'?8 : boch==='16'?4 : 8;
+        var dieGBfromDC = (den==='8Gb')?1 : (den==='16Gb')?2 : (den==='4Gb')?0.5
+                       : (den==='2Gb')?0.25 : (den==='1Gb')?0.125 : 0.5;
+        var capPerRankFromDie = chipsPerRankGuess * dieGBfromDC * 1024;  // MB
+        // If math agrees, use 1 rank as default; otherwise compute ranks
+        var rankGuess = Math.max(1, Math.round(perRankMB / capPerRankFromDie));
+        if(rankGuess>=1 && rankGuess<=8){
+          var totMB = capPerRankFromDie * rankGuess;
+          cap = totMB>=1024 ? (totMB/1024)+'GB' : totMB+'MB';
+        } else {
+          // Fallback: original formula (assumes 1 rank, for older code compatibility)
+          var chipBitsH=boch==='4'?4:boch==='8'?8:boch==='16'?16:8;
+          var totalMB=depMB2*(64/chipBitsH);
+          cap=totalMB>=1024?(totalMB/1024)+'GB':totalMB+'MB';
+        }
       }
     }
 
