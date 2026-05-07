@@ -1239,20 +1239,27 @@ var MICRON=(function(){
     var chipW = null;
 
     if(mi && numDies){
-      var stackMult = /^S[QE]|^T[QE]|^L[QE]/.test(pkr)?4 :
-                      /^SS|^TS|^LS/.test(pkr)?2 :
-                      /^SE|^TE|^LE/.test(pkr)?8 : 1;
+      // Note: Micron's 'dr' field already counts ALL dies including stacked ones
+      // (e.g. SS-package DDP modules report 72 dies, not 36 chip packages),
+      // so we do NOT multiply by a stack factor in the rank math below.
 
       // If bit-org wasn't explicit in the option suffix (e.g. PZ vs PDZ),
       // derive it from die count. For ECC modules, 9 dies/rank → x8; 18 dies/rank → x4.
       // For non-ECC, 8 dies/rank → x8; 16 dies/rank → x4.
+      // LRDIMMs are virtually always x4 — bias toward x4 first when type is LRDIMM
+      // or when die count is high (≥36 dies = x4 organization at any reasonable capacity).
       if(!bitOrg && mi.ecc){
-        // Try x8 first (chipW=8 → 9 dies-per-rank with ECC), then x4 (chipW=4 → 18 dies-per-rank)
-        var totalDies = numDies * stackMult;
-        if(totalDies % 9 === 0 && totalDies / 9 <= 8){ bitOrg = 'x8'; }
-        else if(totalDies % 18 === 0 && totalDies / 18 <= 8){ bitOrg = 'x4'; }
+        var totalDies = numDies;
+        var preferX4 = (mi.lr === true) || (numDies >= 36);
+        if(preferX4){
+          if(totalDies % 18 === 0 && totalDies / 18 <= 8){ bitOrg = 'x4'; }
+          else if(totalDies % 9 === 0 && totalDies / 9 <= 8){ bitOrg = 'x8'; }
+        } else {
+          if(totalDies % 9 === 0 && totalDies / 9 <= 8){ bitOrg = 'x8'; }
+          else if(totalDies % 18 === 0 && totalDies / 18 <= 8){ bitOrg = 'x4'; }
+        }
       } else if(!bitOrg && !mi.ecc){
-        var totalDies2 = numDies * stackMult;
+        var totalDies2 = numDies;
         if(totalDies2 % 8 === 0 && totalDies2 / 8 <= 8){ bitOrg = 'x8'; }
         else if(totalDies2 % 16 === 0 && totalDies2 / 16 <= 8){ bitOrg = 'x4'; }
       }
@@ -1260,7 +1267,7 @@ var MICRON=(function(){
       if(bitOrg){
         chipW = bitOrg==='x4' ? 4 : bitOrg==='x8' ? 8 : 16;
         var diesPerRankWithECC = ecc ? (72/chipW) : (64/chipW);
-        var ranks = Math.round((numDies*stackMult) / diesPerRankWithECC);
+        var ranks = Math.round(numDies / diesPerRankWithECC);
         if(ranks>=1 && ranks<=8){ rankStr = ranks+'Rx'+chipW; rankConf='derived'; }
       } else {
         rankNote = 'Could not derive bit organization from die count — check module label for rank.';
