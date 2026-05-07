@@ -1245,25 +1245,30 @@ var MICRON=(function(){
       // (e.g. SS-package DDP modules report 72 dies, not 36 chip packages),
       // so we do NOT multiply by a stack factor in the rank math below.
 
-      // If bit-org wasn't explicit in the option suffix (e.g. PZ vs PDZ),
-      // derive it from die count. For ECC modules, 9 dies/rank → x8; 18 dies/rank → x4.
-      // For non-ECC, 8 dies/rank → x8; 16 dies/rank → x4.
-      // LRDIMMs are virtually always x4 — bias toward x4 first when type is LRDIMM
-      // or when die count is high (≥36 dies = x4 organization at any reasonable capacity).
+      // Bit-org defaults from Micron's typical configurations (when no explicit D marker):
+      //  - 9 dies on ECC: must be 1Rx8 (only valid bit-org)
+      //  - RDIMM (PZ/RZ) at 18+ dies: x4 default — 1Rx4, 2Rx4, 4Rx4
+      //  - LRDIMM (LZ) at 18+ dies: x4 default
+      //  - ECC UDIMM (AZ/EZ/UZ/FZ) at 18+ dies: x8 default — 2Rx8 (server UDIMM convention)
+      //  - PDZ/RDZ/LDZ (D marker): x8 explicit (already handled in modType4)
       if(!bitOrg && mi.ecc){
-        var totalDies = numDies;
-        var preferX4 = (mi.lr === true) || (numDies >= 36);
-        if(preferX4){
-          if(totalDies % 18 === 0 && totalDies / 18 <= 8){ bitOrg = 'x4'; }
-          else if(totalDies % 9 === 0 && totalDies / 9 <= 8){ bitOrg = 'x8'; }
-        } else {
-          if(totalDies % 9 === 0 && totalDies / 9 <= 8){ bitOrg = 'x8'; }
-          else if(totalDies % 18 === 0 && totalDies / 18 <= 8){ bitOrg = 'x4'; }
+        if(numDies === 9){ bitOrg = 'x8'; }
+        else {
+          var isRegOrLR = (mi.reg === true) || (mi.lr === true);
+          var preferX4 = isRegOrLR;
+          if(preferX4){
+            if(numDies % 18 === 0 && numDies / 18 <= 8){ bitOrg = 'x4'; }
+            else if(numDies % 9 === 0 && numDies / 9 <= 8){ bitOrg = 'x8'; }
+          } else {
+            // ECC UDIMM defaults to x8
+            if(numDies % 9 === 0 && numDies / 9 <= 8){ bitOrg = 'x8'; }
+            else if(numDies % 18 === 0 && numDies / 18 <= 8){ bitOrg = 'x4'; }
+          }
         }
       } else if(!bitOrg && !mi.ecc){
-        var totalDies2 = numDies;
-        if(totalDies2 % 8 === 0 && totalDies2 / 8 <= 8){ bitOrg = 'x8'; }
-        else if(totalDies2 % 16 === 0 && totalDies2 / 16 <= 8){ bitOrg = 'x4'; }
+        if(numDies === 8){ bitOrg = 'x8'; }
+        else if(numDies % 16 === 0 && numDies / 16 <= 8){ bitOrg = 'x4'; }
+        else if(numDies % 8 === 0 && numDies / 8 <= 8){ bitOrg = 'x8'; }
       }
 
       if(bitOrg){
