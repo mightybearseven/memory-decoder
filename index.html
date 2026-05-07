@@ -992,9 +992,9 @@ var MICRON=(function(){
            '1G3':'1333 CL10','1G4':'1333 CL9','1G5':'1333 CL8','1GA':'1333 CL11',
            '1G6':'1600 CL11','1G7':'1600 CL10','1G8':'1600 CL9',
            '1G9':'1866 CL13','1GB':'1866 CL12','2G1':'2133 CL14'};
-  var DEPTH={'51':'512MB','1G':'1GB','2G':'2GB','4G':'4GB','8G':'8GB','AG':'16GB'};
-  var DEP_TO_GB_DDR4={'51':4,'1G':8,'2G':16,'4G':32,'8G':64,'AG':128};
-  var DEP_TO_GB_DDR3={'51':4,'1G':8,'2G':16,'4G':32,'8G':64};
+  var DEPTH={'51':'512MB','512':'512Mb','1G':'1GB','2G':'2GB','4G':'4GB','8G':'8GB','AG':'16GB'};
+  var DEP_TO_GB_DDR4={'51':4,'512':4,'1G':8,'2G':16,'4G':32,'8G':64,'AG':128};
+  var DEP_TO_GB_DDR3={'51':4,'512':4,'1G':8,'2G':16,'4G':32,'8G':64};
 
   // DDR4 module-type detection from option-suffix string
   function modType4(o){
@@ -1007,10 +1007,13 @@ var MICRON=(function(){
     if(/FZ|UZ|FG|EZ/.test(o))     return{type:'ECC UDIMM', pins:'288-pin',ecc:true, reg:false,lr:false, bitOrg:null};
     return null;
   }
-  // DDR3 module-type detection from single type-char (positioned right after width field)
-  function modType3(typeChar){
-    if(typeChar==='L') return{type:'LRDIMM', pins:'240-pin',ecc:true, reg:true, lr:true,  bitOrg:'x4'};
-    if(typeChar==='P') return{type:'RDIMM',  pins:'240-pin',ecc:true, reg:true, lr:false, bitOrg:'x4'};
+  // DDR3 module-type detection from full option suffix (typeChar + remaining codes)
+  function modType3(opts){
+    var typeChar = opts[0] || '';
+    // Check for x8 marker D in the position right after type char (PDZ/RDZ/LDZ)
+    var isX8 = /^[PRL]D/.test(opts);
+    if(typeChar==='L') return{type:'LRDIMM', pins:'240-pin',ecc:true, reg:true, lr:true,  bitOrg:isX8?'x8':'x4'};
+    if(typeChar==='P') return{type:'RDIMM',  pins:'240-pin',ecc:true, reg:true, lr:false, bitOrg:isX8?'x8':'x4'};
     if(typeChar==='A') return{type:'UDIMM',  pins:'240-pin',ecc:false,reg:false,lr:false, bitOrg:null};
     if(typeChar==='H') return{type:'SODIMM', pins:'204-pin',ecc:false,reg:false,lr:false, bitOrg:null};
     // default for DDR3 = registered DIMM (no type letter present)
@@ -1052,27 +1055,37 @@ var MICRON=(function(){
     }
 
     if(isDDR4){
-      // MT A [die#:1-2] [V:1] [pkg:2] [depth:2] [width:2] [opts]
+      // MT A [die#:1-2] [V:1] [pkg:2-3] [depth:2-3] [width:2] [opts]
       var s4 = sliceFromDie(base, 3);
       if(!s4) return null;
       dr     = base.substring(3, 3+s4.dieLen);
       vc     = base[s4.vcPos];
-      pkr    = base.substring(s4.vcPos+1, s4.vcPos+3);
-      depRaw = base.substring(s4.vcPos+3, s4.vcPos+5);
-      wr     = base.substring(s4.vcPos+5, s4.vcPos+7);
-      opts   = base.substring(s4.vcPos+7);
+      // Detect 3-char package: char at +3 is Z (heat-spreader marker like SZF/SZS/SZQ)
+      var pkgLen4 = (base[s4.vcPos+2]==='Z') ? 3 : 2;
+      pkr    = base.substring(s4.vcPos+1, s4.vcPos+1+pkgLen4);
+      // Detect 3-char depth: '512' starts with '5' followed by digit followed by digit
+      var depStart4 = s4.vcPos+1+pkgLen4;
+      var depLen4 = (base[depStart4]==='5' && /[0-9]/.test(base[depStart4+1]) && /[0-9]/.test(base[depStart4+2])) ? 3 : 2;
+      depRaw = base.substring(depStart4, depStart4+depLen4);
+      wr     = base.substring(depStart4+depLen4, depStart4+depLen4+2);
+      opts   = base.substring(depStart4+depLen4+2);
       typeCh = null;
     } else {
-      // MT [die#:1-2] [V:1] [pkg:2] [depth:2] [width:2] [type:1] [pkg-codes]
+      // MT [die#:1-2] [V:1] [pkg:2-3] [depth:2-3] [width:2] [type:1] [pkg-codes]
       var s3 = sliceFromDie(base, 2);
       if(!s3) return null;
       dr     = base.substring(2, 2+s3.dieLen);
       vc     = base[s3.vcPos];
-      pkr    = base.substring(s3.vcPos+1, s3.vcPos+3);
-      depRaw = base.substring(s3.vcPos+3, s3.vcPos+5);
-      wr     = base.substring(s3.vcPos+5, s3.vcPos+7);
-      typeCh = base[s3.vcPos+7] || '';
-      opts   = base.substring(s3.vcPos+7);
+      // 3-char package detection (SZF/SZS/SZQ heat-spreader variants)
+      var pkgLen3 = (base[s3.vcPos+2]==='Z') ? 3 : 2;
+      pkr    = base.substring(s3.vcPos+1, s3.vcPos+1+pkgLen3);
+      // 3-char depth detection ('512' = 512Mb on older parts)
+      var depStart3 = s3.vcPos+1+pkgLen3;
+      var depLen3 = (base[depStart3]==='5' && /[0-9]/.test(base[depStart3+1]) && /[0-9]/.test(base[depStart3+2])) ? 3 : 2;
+      depRaw = base.substring(depStart3, depStart3+depLen3);
+      wr     = base.substring(depStart3+depLen3, depStart3+depLen3+2);
+      typeCh = base[depStart3+depLen3+2] || '';
+      opts   = base.substring(depStart3+depLen3+2);
     }
 
     var dep      = DEPTH[depRaw]||depRaw;
@@ -1081,7 +1094,7 @@ var MICRON=(function(){
     var pkg      = PKG[pkr]||pkr;
     var sufHead  = suf.substring(0,3);
     var spd      = suf ? (isDDR4 ? (SP4[sufHead]||suf) : (SP3[sufHead]||suf)) : '';
-    var mi       = isDDR4 ? modType4(opts) : modType3(typeCh);
+    var mi       = isDDR4 ? modType4(opts) : modType3(opts);
     var capGB    = isDDR4 ? DEP_TO_GB_DDR4[depRaw] : DEP_TO_GB_DDR3[depRaw];
     var cap      = capGB ? capGB+'GB' : null;
 
