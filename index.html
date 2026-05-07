@@ -1667,6 +1667,43 @@ var KINGSTON_HP=(function(){
 // CRUCIAL / BALLISTIX
 // ═══════════════════════════════════════════════════════
 var CRUCIAL=(function(){
+  // Crucial DDR4/DDR5 module-type letter (right after Gx).
+  // D = Desktop UDIMM (non-ECC)
+  // S = SODIMM (non-ECC)
+  // W = Workstation ECC UDIMM
+  // R = Server RDIMM (rare, mostly migrated to MTA*)
+  // L = LRDIMM
+  var MT_LETTER={
+    'D':{type:'UDIMM',     pins:'288-pin',ecc:false,reg:false,lr:false,form:'DIMM'},
+    'S':{type:'SODIMM',    pins:'260-pin',ecc:false,reg:false,lr:false,form:'SODIMM'},
+    'W':{type:'ECC UDIMM', pins:'288-pin',ecc:true, reg:false,lr:false,form:'DIMM'},
+    'R':{type:'RDIMM',     pins:'288-pin',ecc:true, reg:true, lr:false,form:'DIMM'},
+    'L':{type:'LRDIMM',    pins:'288-pin',ecc:true, reg:true, lr:true, form:'DIMM'},
+    'C':{type:'ECC SODIMM',pins:'260-pin',ecc:true, reg:false,lr:false,form:'SODIMM'},
+  };
+  // 3-char speed code at PN tail
+  var SP4_SUF={
+    '160':'1600 CL11','186':'1866 CL13','213':'2133 CL15','21A':'2133 CL15',
+    '24A':'2400 CL17','266':'2666 CL19','293':'2933 CL21','32A':'3200 CL22',
+  };
+  var SP5_SUF={
+    '480':'4800 CL40','48B':'4800 CL40','520':'5200 CL42','560':'5600 CL46',
+    '64A':'6400 CL52',
+  };
+  // Rank+width chars (positions 4+5 after Gx letter+F):
+  // R+A = 1Rx16 / 1Rx8 mix (consumer)
+  // D+8 = 2Rx8 (kit doubled)
+  // S+8 = 1Rx8 (single rank x8)
+  // R+A is a generic consumer code that maps to 1Rx16, 1Rx8, OR 2Rx8 — Crucial doesn't pin this in the PN
+  function rankFromCodes(rk, wd){
+    if(rk==='R' && wd==='A') return null;       // ambiguous (1Rx16/1Rx8/2Rx8) — verify
+    if(rk==='D' && wd==='8') return '2Rx8';
+    if(rk==='S' && wd==='8') return '1Rx8';
+    if(rk==='S' && wd==='4') return '1Rx4';
+    if(rk==='D' && wd==='4') return '2Rx4';
+    return null;
+  }
+
   function decode(pn){
     var u=pn.toUpperCase();
     if(!u.startsWith('CT')&&!u.startsWith('BL')) return null;
@@ -1676,30 +1713,50 @@ var CRUCIAL=(function(){
     var cap=cm[1],rest2=rest.substring(cap.length);
     var gm=rest2.match(/^(G[345])/i),gc=gm?gm[1]:null;
     var gen=gc==='G4'?'DDR4':gc==='G3'?'DDR3':gc==='G5'?'DDR5':null;
+    var rest3 = gc ? rest2.substring(2) : rest2;        // after Gx
+    // Parse [type:1] [F:1] [rank:1] [width:1] [speed:3] from rest3, plus optional kit indicator
+    var typeCh = rest3[0] || '';
+    var rkCh   = rest3[2] || '';
+    var wdCh   = rest3[3] || '';
+    var speedRaw = rest3.substring(4, 7);                // first 3 chars after type+F+rank+width
     var parts=pn.split('-'),suf=parts[1]||null;
-    var sod=u.indexOf('SOD')>=0||u.indexOf('HZ')>=0;
+    var sod = (typeCh==='S' || typeCh==='C') || u.indexOf('SOD')>=0 || u.indexOf('HZ')>=0;
+    var mi = MT_LETTER[typeCh] || null;
+    var spd = (gen==='DDR5' ? SP5_SUF[speedRaw] : SP4_SUF[speedRaw]) || speedRaw || (suf||'');
+    var rankStr = rankFromCodes(rkCh, wdCh);
+    // Bit organization derives from width char (8 or 4); A is ambiguous
+    var bo = wdCh==='8'?'x8' : wdCh==='4'?'x4' : null;
+    var voltage = gen==='DDR5'?'1.1V':gen==='DDR4'?'1.2V':gen==='DDR3'?'1.5V':'?';
+
     return {
       manufacturer:pfx==='BL'?'Crucial (Ballistix)':'Crucial',
-      confidence:gen?72:50,
-      rankConfidence:'unknown',
+      confidence: gen ? (mi ? 80 : 65) : 50,
+      rankConfidence: rankStr ? 'encoded' : 'unknown',
       pn_display:pn.toUpperCase(),
       segments:[
         {seg:pfx,    label:'Brand',    value:pfx==='BL'?'Crucial Ballistix':'Crucial'},
         {seg:cap,    label:'Capacity', value:cap+'GB'},
         {seg:gc||'', label:'DDR Gen',  value:gen||'?'},
-        ...(suf?[{seg:suf,label:'Speed',value:suf}]:[]),
+        ...(typeCh?[{seg:typeCh,label:'Module Type',value:mi?mi.type:typeCh}]:[]),
+        ...(speedRaw?[{seg:speedRaw,label:'Speed',value:spd}]:[]),
       ].filter(function(s){return s.seg;}),
       specs:{
         'Manufacturer':pfx==='BL'?'Crucial (Ballistix)':'Crucial',
         'Product Line':pfx==='BL'?'Ballistix':'Standard',
         'DRAM Standard':gen||'?',
-        'Capacity':cap+'GB','Speed':suf||'?',
-        'Rank':'Not encoded',
-        'Form Factor':sod?'SODIMM':'DIMM',
-        'ECC':'No','Registered':'No',
-        'Voltage':gen==='DDR4'?'1.2V':gen==='DDR3'?'1.5V':'?',
+        'Module Type': mi ? mi.type : (sod?'SODIMM':'UDIMM'),
+        'Form Factor': mi ? mi.form : (sod?'SODIMM':'DIMM'),
+        'Pin Count':   mi ? mi.pins : (sod?'260-pin':'288-pin'),
+        'Capacity':cap+'GB',
+        'Speed':spd || '?',
+        'Rank': rankStr || 'Not encoded',
+        'Bit Organization': bo || '?',
+        'ECC':         mi ? (mi.ecc?'Yes':'No') : 'No',
+        'Registered':  mi ? (mi.reg?'Yes':'No') : 'No',
+        'Load Reduced':mi ? (mi.lr?'Yes':'No')  : 'No',
+        'Voltage':voltage,
       },
-      notes:'Crucial part numbers do not encode rank — check the product listing.',
+      notes: rankStr ? null : 'Crucial consumer PNs (D-prefix) often map to multiple rank configurations — verify against the module label or product listing.',
     };
   }
   return{decode:decode};
