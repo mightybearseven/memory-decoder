@@ -540,17 +540,26 @@ var SAMSUNG=(function(){
       var capGB4 = parseInt(cap);
       var chipW4 = BOG[boc]==='x4'?4 : BOG[boc]==='x8'?8 : BOG[boc]==='x16'?16 : 8;
       var stk = pkc==='2' ? 2 : pkc==='4' ? 4 : 1;
-      rankStr = deriveRankCommon(capGB4, dieGB, chipW4, stk);
-      if(rankStr) rankConf='derived';
+      // Try primary die density first; fall back to alternates if rank math fails.
+      // Samsung reuses die-rev letters across generations (e.g. E-die was 8Gb in
+      // older parts, 16Gb in newer).
+      var dieOpts4 = [dieGB, 0.5, 1, 2, 4];
+      for(var i=0;i<dieOpts4.length;i++){
+        var got = deriveRankCommon(capGB4, dieOpts4[i], chipW4, stk);
+        if(got){ rankStr = got; rankConf = (i===0?'derived':'derived'); dieGB = dieOpts4[i]; break; }
+      }
     } else if(isDDR3 && cap && boc && !rankStr) {
       // Samsung DDR3 server PNs share the DDR4 positional layout — just different die
       // densities and 240-pin instead of 288-pin. The rank math works the same.
       var capGB3 = parseInt(cap);
       var chipW3 = BOG[boc]==='x4'?4 : BOG[boc]==='x8'?8 : BOG[boc]==='x16'?16 : 8;
       var stk3   = pkc==='2' ? 2 : pkc==='4' ? 4 : 1;
-      rankStr = deriveRankCommon(capGB3, dieGB, chipW3, stk3);
-      if(rankStr) rankConf='derived';
-      else rankNote = 'Could not derive rank — verify against module label.';
+      var dieOpts3 = [dieGB, 0.125, 0.25, 0.5, 1];
+      for(var j=0;j<dieOpts3.length;j++){
+        var got3 = deriveRankCommon(capGB3, dieOpts3[j], chipW3, stk3);
+        if(got3){ rankStr = got3; rankConf = 'derived'; dieGB = dieOpts3[j]; break; }
+      }
+      if(!rankStr) rankNote = 'Could not derive rank — verify against module label.';
     }
 
     // Temperature: 'C'=Commercial, 'I'=Industrial, 'Y'=Low-voltage (DDR3L)
@@ -1089,6 +1098,7 @@ var MICRON=(function(){
     if(/LZ|LS/.test(o))            return{type:'LRDIMM',    pins:'288-pin',ecc:true, reg:true, lr:true,  bitOrg:null}; // derive
     if(/PDZ|PDS|RDZ|RDS/.test(o)) return{type:'RDIMM',     pins:'288-pin',ecc:true, reg:true, lr:false, bitOrg:'x8'};
     if(/PZ|PS|RZ|RS/.test(o))     return{type:'RDIMM',     pins:'288-pin',ecc:true, reg:true, lr:false, bitOrg:null}; // derive (could be x4 OR x8 depending on die count)
+    if(/^X.*Z/.test(o))            return{type:'NVDIMM-N',  pins:'288-pin',ecc:true, reg:true, lr:false, bitOrg:'x4'}; // NVDIMM-N (registered + non-volatile, standard x4)
     if(/HZ|HG/.test(o))            return{type:'SODIMM',    pins:'260-pin',ecc:false,reg:false,lr:false, bitOrg:null};
     if(/AZ|AG/.test(o))            return{type:'UDIMM',     pins:'288-pin',ecc:false,reg:false,lr:false, bitOrg:null};
     if(/FZ|UZ|FG|EZ/.test(o))     return{type:'ECC UDIMM', pins:'288-pin',ecc:true, reg:false,lr:false, bitOrg:null};
@@ -1182,6 +1192,13 @@ var MICRON=(function(){
     var sufHead  = suf.substring(0,3);
     var spd      = suf ? (isDDR4 ? (SP4[sufHead]||suf) : (SP3[sufHead]||suf)) : '';
     var mi       = isDDR4 ? modType4(opts) : modType3(opts);
+    // If data width is 72 (ECC) but the option suffix decoded as non-ECC type,
+    // promote to ECC variant. Micron uses 'AZ' for both ECC and non-ECC UDIMMs;
+    // the data-width field is the authoritative ECC marker.
+    if(mi && ecc && !mi.ecc){
+      if(mi.type==='UDIMM')       mi = {type:'ECC UDIMM',    pins:mi.pins,ecc:true,reg:false,lr:false,bitOrg:mi.bitOrg};
+      else if(mi.type==='SODIMM') mi = {type:'ECC SODIMM',   pins:mi.pins,ecc:true,reg:false,lr:false,bitOrg:mi.bitOrg};
+    }
     var capGB    = isDDR4 ? DEP_TO_GB_DDR4[depRaw] : DEP_TO_GB_DDR3[depRaw];
     var cap      = capGB ? capGB+'GB' : null;
 
