@@ -384,12 +384,41 @@ var SAMSUNG=(function(){
 
   // DDR4/DDR3 depth code → DRAM depth label (informational only)
   var DEP={
-    '56':'256M','51':'512M','1G':'1G','2G':'2G','4G':'4G','8G':'8G','AG':'16G',
+    '52':'256M','56':'256M','51':'512M','1G':'1G','2G':'2G','4G':'4G','8G':'8G','AG':'16G',
     '1K':'1G','2K':'2G','4K':'4G','8K':'8G','AK':'16G','BK':'32G',
   };
   // DDR4 depth → total module capacity on a 64-bit data bus (ECC parity not counted)
-  var DEP_TO_GB={'56':2,'51':4,'1G':8,'2G':16,'4G':32,'8G':64,'AG':128,
+  var DEP_TO_GB={'52':4,'56':2,'51':4,'1G':8,'2G':16,'4G':32,'8G':64,'AG':128,
                  '1K':8,'2K':16,'4K':32,'8K':64,'AK':128,'BK':256};
+
+  // Samsung DDR3 server-DIMM density codes — maps the 4-char field at PN positions
+  // 5-8 (dr+bc+boc) directly to capacity+rank+width. Used when DT-derived rank fails
+  // (older parts where rank isn't cleanly derivable from die density).
+  // Format: key = 4-char density code,  value = {cap:'GB', rank:'NRxW', width:'x4|x8|x16'}
+  var DDR3_DENSITY={
+    // 4GB modules
+    '5170':{cap:'4GB',rank:'2Rx4',width:'x4'},  // 256Mx72  (2Rx4)
+    '5173':{cap:'4GB',rank:'1Rx8',width:'x8'},  // 512Mx72  (1Rx8) — Q-die
+    '5270':{cap:'4GB',rank:'1Rx4',width:'x4'},  // 512Mx72  (1Rx4)
+    '5273':{cap:'4GB',rank:'1Rx8',width:'x8'},  // 512Mx72  (1Rx8)
+    // 8GB modules
+    '1G70':{cap:'8GB',rank:'2Rx4',width:'x4'},  // 1Gx72   (2Rx4)
+    '1G73':{cap:'8GB',rank:'2Rx8',width:'x8'},  // 1Gx72   (2Rx8)
+    '5172':{cap:'8GB',rank:'2Rx4',width:'x4'},  // alt 8GB 2Rx4
+    // 16GB modules
+    '2G70':{cap:'16GB',rank:'2Rx4',width:'x4'}, // 2Gx72  (2Rx4)
+    '2G73':{cap:'16GB',rank:'2Rx8',width:'x8'}, // 2Gx72  (2Rx8)
+    // 32GB modules
+    '4G70':{cap:'32GB',rank:'4Rx4',width:'x4'}, // 4Gx72  (4Rx4 LRDIMM/RDIMM)
+    '4G72':{cap:'32GB',rank:'4Rx4',width:'x4'},
+    // 2GB modules
+    '5673':{cap:'2GB',rank:'1Rx8',width:'x8'}, // 256Mx72 (1Rx8)
+    '5670':{cap:'2GB',rank:'1Rx4',width:'x4'},
+    '5770':{cap:'2GB',rank:'2Rx8',width:'x8'},
+    // Non-ECC variants (last digit indicates x8 etc., field still reads same)
+    '1G63':{cap:'8GB',rank:'2Rx8',width:'x8'},
+    '5163':{cap:'4GB',rank:'2Rx8',width:'x8'},
+  };
 
   var BOG={'0':'x4','3':'x8','4':'x16'};
   var CREV={'A':'1st gen die','B':'2nd gen die','C':'3rd gen die','D':'4th gen die',
@@ -485,6 +514,19 @@ var SAMSUNG=(function(){
     // ─── Rank derivation ───
     var rankStr=null, rankConf='unknown', rankNote=null;
 
+    // DDR3 density-code lookup (older Samsung server-DIMM scheme).
+    // The 4-char field at PN positions 5-8 (dr+bc+boc) directly encodes
+    // capacity, rank, and width for known parts. Use this BEFORE attempting
+    // die-density math, since these older codes don't always cleanly resolve
+    // from die rev alone.
+    var ddr3DensCode = isDDR3 ? (dr+bc+boc) : null;
+    var ddr3Dens = ddr3DensCode ? DDR3_DENSITY[ddr3DensCode] : null;
+    if(ddr3Dens){
+      cap = ddr3Dens.cap;
+      rankStr = ddr3Dens.rank;
+      rankConf = 'encoded';
+    }
+
     if(isDDR5 && cap && boc){
       var capGB5 = parseInt(cap);
       var chipW5 = BOG[boc]==='x4'?4 : BOG[boc]==='x8'?8 : BOG[boc]==='x16'?16 : 8;
@@ -500,7 +542,7 @@ var SAMSUNG=(function(){
       var stk = pkc==='2' ? 2 : pkc==='4' ? 4 : 1;
       rankStr = deriveRankCommon(capGB4, dieGB, chipW4, stk);
       if(rankStr) rankConf='derived';
-    } else if(isDDR3 && cap && boc) {
+    } else if(isDDR3 && cap && boc && !rankStr) {
       // Samsung DDR3 server PNs share the DDR4 positional layout — just different die
       // densities and 240-pin instead of 288-pin. The rank math works the same.
       var capGB3 = parseInt(cap);
@@ -604,6 +646,23 @@ var HYNIX=(function(){
     'YG':'1333 CL9 (1.35V)','YH':'1600 CL11 (1.35V)','YK':'1600 CL11 (1.35V)',
   };
   var DR={'A':'A-die','B':'B-die','C':'C-die','D':'D-die','E':'E-die','F':'F-die','J':'J-die','M':'M-die'};
+
+  // Hynix DDR3/DDR4 module-capacity lookup keyed on dc+dr (positions 3+4-5).
+  // Returns total module capacity (with ECC parity excluded).
+  // Built from datasheet observations; covers older DDR3 parts where the
+  // DRAM-die depth doesn't simply multiply by chip count.
+  var MOD_CAP={
+    // DDR3 — 1Gb die family
+    '125':'2GB',  '151':'4GB',
+    // DDR3 — 2Gb die family (3xx prefix)
+    '325':'4GB',  '351':'8GB',  '31G':'8GB',  '32G':'16GB',
+    // DDR3 — 4Gb die family (4xx prefix)
+    '425':'8GB',  '451':'4GB',  '41G':'8GB',  '42G':'16GB', '44G':'32GB',
+    // DDR3 — 8Gb die family
+    '84G':'64GB', '88G':'128GB','81G':'16GB',
+    // DDR4 — same scheme but maps follow DDR4 die sizes (4Gb/8Gb/16Gb/32Gb)
+    'A1G':'16GB', 'A2G':'32GB','A4G':'64GB',
+  };
   var D2C={'256MB':null,'512MB':null,'1GB':'8GB','2GB':'16GB','4GB':'32GB','8GB':'64GB','16GB':'128GB'};
 
   function decode(pn){
@@ -620,10 +679,10 @@ var HYNIX=(function(){
     var spd=suf?((isDDR4?SP4:SP3)[suf]||suf):'';
     var drch=vr[0]||'',drev=DR[drch]||drch;
     var bo=null,boch=null;
-    if(/R8|F8/.test(vr)){bo='x8';boch='8';}
-    else if(/R4|F4/.test(vr)){bo='x4';boch='4';}
-    else if(/R1|F1/.test(vr)){bo='x16';boch='16';}
-    var cap=D2C[dep]||null;
+    if(/[RFPVMLE]8|F8/.test(vr)){bo='x8';boch='8';}
+    else if(/[RFPVMLE]4|F4/.test(vr)){bo='x4';boch='4';}
+    else if(/[RFPVMLE]1|F1/.test(vr)){bo='x16';boch='16';}
+    var cap = MOD_CAP[dc+dr] || D2C[dep] || null;
 
     if(!cap && dep && bo) {
       var depMB={'256MB':256,'512MB':512,'1GB':1024,'2GB':2048}[dep];
